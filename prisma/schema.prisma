@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_KAI_OFFICE_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  password      String
+  name          String
+  noTelp        String
+  role          Role           @default(USER)
+  profileImage  String? // URL profile image
+
+  unit          Unit?          @relation(fields: [unitId], references: [id])
+  unitId        String?        // Optional, jika tidak semua user punya unit
+
+  meetings      Meeting[]      @relation("UserMeetings")
+  meetingsCreated Meeting[]    @relation("MeetingsCreatedBy")
+
+  notifications Notification[]
+  settings      Setting        @relation(fields: [settingId], references: [id])
+  settingId     String         @unique
+
+  employee      Employee?      // Relasi balik dari Employee
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model Room {
+  id             String    @id @default(uuid())
+  name           String    @unique
+  location       String
+  capacity       Int
+  isAvailable    Boolean   @default(true)
+  autoCancel     Boolean   @default(false) // auto cancel if not used
+  cancelDeadline Int // minutes before meeting start
+  meetings       Meeting[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Meeting {
+  id           String     @id @default(uuid())
+  title        String
+  description  String?
+  startTime    DateTime
+  endTime      DateTime
+  type         String?
+  room         Room       @relation(fields: [roomId], references: [id])
+  roomId       String
+  attendees    User[]     @relation("UserMeetings")
+  participants Employee[] @relation("EmployeeMeetings")
+  createdBy    User       @relation("MeetingsCreatedBy", fields: [createdById], references: [id])
+  createdById  String     
+
+  organizerUnit   Unit    @relation("UnitOrganizedMeetings", fields: [organizerUnitId], references: [id])
+  organizerUnitId String
+
+  meetingAttendees MeetingAttendee[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Employee {
+  id     String  @id @default(uuid())
+  name   String
+  email  String  @unique
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String? @unique
+
+  unit   Unit   @relation(fields: [unitId], references: [id])
+  unitId String
+
+  meetings         Meeting[]         @relation("EmployeeMeetings")
+  meetingAttendees MeetingAttendee[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  id       String  @id @default(uuid())
+  user     User?
+
+  emailNotification Boolean @default(true)
+  meetingReminder   Boolean @default(true)
+}
+
+model MeetingAttendee {
+  id String @id @default(uuid())
+
+  meetingId String
+  meeting   Meeting @relation(fields: [meetingId], references: [id])
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+}
+
+model Unit {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  employees Employee[]
+
+  users     User[]     // Tambahkan ini: relasi ke User
+
+  meetingsOrganized Meeting[] @relation("UnitOrganizedMeetings")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
