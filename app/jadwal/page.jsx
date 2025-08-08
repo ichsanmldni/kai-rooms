@@ -48,6 +48,7 @@ import {
   ScreenShare,
   CloudCog,
   Building2,
+  LinkIcon,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -62,6 +63,7 @@ import { useRouter } from "next/navigation";
 import NotificationModal from "../../components/NotificationModal";
 import { fetchNotificationList } from "../../api-client/notification";
 import { jwtDecode } from "jwt-decode";
+import Image from "next/image";
 
 const KaiRoomsApp = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -242,10 +244,10 @@ const KaiRoomsApp = () => {
       });
 
       return {
-        id: room.id,
-        name: room.name,
-        location: room.location,
-        capacity: room.capacity,
+        id: room?.id,
+        name: room?.name,
+        location: room?.location,
+        capacity: room?.capacity,
         meetings: meetingsByTime,
       };
     });
@@ -288,10 +290,10 @@ const KaiRoomsApp = () => {
 
     return [
       {
-        id: room.id,
-        name: room.name,
-        location: room.location,
-        capacity: room.capacity,
+        id: room?.id,
+        name: room?.name,
+        location: room?.location,
+        capacity: room?.capacity,
         meetings: meetingsByTime,
       },
     ];
@@ -383,15 +385,6 @@ const KaiRoomsApp = () => {
         alert(error.message);
       }
     }
-    async function loadMeetings() {
-      try {
-        const data = await fetchMeetingList();
-        console.log("ini data raw meetingss", data);
-        setDataMeetings(data);
-      } catch (error) {
-        alert(error.message);
-      }
-    }
 
     function generateSlots(start = 8, end = 17, interval = 1) {
       const generatedSlots = [];
@@ -415,11 +408,25 @@ const KaiRoomsApp = () => {
 
     loadUser();
     generateSlots();
-    loadMeetings();
     loadEmployee();
     loadUnit();
     loadRooms();
   }, []);
+
+  useEffect(() => {
+    if (userData && userData.id) {
+      async function loadMeetings() {
+        try {
+          const data = await fetchMeetingList(userData.id);
+          console.log("ini data raw meetingss", data);
+          setDataMeetings(data);
+        } catch (error) {
+          alert(error.message);
+        }
+      }
+      loadMeetings();
+    }
+  }, [userData]);
 
   console.log("ini user data", userData);
 
@@ -480,7 +487,7 @@ const KaiRoomsApp = () => {
         id: m.id,
         title: m.title,
         lokasi: "Jakarta Pusat",
-        room: m.room.name,
+        room: m.room?.name,
         unit: m.participants?.[0]?.unit?.name || "-",
         time,
         endTime: end,
@@ -509,7 +516,7 @@ const KaiRoomsApp = () => {
             }),
             time,
             endTime: end,
-            ruangan: m.room.name,
+            ruangan: m.room?.name,
             linkMeet: m.linkMeet || "-", // fallback if no online link
           };
           nearestDiff = diff;
@@ -528,7 +535,7 @@ const KaiRoomsApp = () => {
           endTime: end,
           unit: m.organizerUnit.name || "-",
           tanggal: tanggalFormat,
-          type: m.type ? m.type : "offline",
+          type: m.type ? m.type : "Offline",
         });
       }
     }
@@ -540,10 +547,16 @@ const KaiRoomsApp = () => {
 
   console.log("ini data rooms selected tanggal", dataRoomsSelectedTanggal);
 
-  // useEffect(() => {
-  //   const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-  //   return () => clearInterval(timer);
-  // }, []);
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    setNotificationCount(
+      dataNotification.filter((data) => data.isRead === false).length
+    );
+  }, [dataNotification]);
 
   const formatDate = (date) => {
     return date.toLocaleDateString("id-ID", {
@@ -875,25 +888,23 @@ const KaiRoomsApp = () => {
   };
 
   const [selectedDate, setSelectedDate] = useState(() => {
-    // Default: hari ini
     const today = new Date();
-    return today.toISOString().split("T")[0];
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
   });
 
-  // Saat klik hari di kalender:
   const handleCalendarDayClick = (day) => {
     if (!day) return;
-    const year = currentTime.getFullYear();
-    const month = currentTime.getMonth();
-    // --- OLD ---
-    // const dateObj = new Date(year, month, day);
-    // setSelectedDate(dateObj.toISOString().split("T")[0]);
 
-    // --- NEW: Tambahkan offset WIB (UTC+7) ---
+    const year = calendarMonth.getFullYear(); // ✅ pakai calendarMonth
+    const month = calendarMonth.getMonth();
+
     const dateObj = new Date(Date.UTC(year, month, day, 0, 0, 0));
-    // Offset 7 jam (WIB)
-    dateObj.setUTCHours(dateObj.getUTCHours() + 7);
-    setSelectedDate(dateObj.toISOString().split("T")[0]);
+    dateObj.setUTCHours(dateObj.getUTCHours() + 7); // convert ke WIB
+
+    setSelectedDate(dateObj.toISOString().split("T")[0]); // format: YYYY-MM-DD
   };
 
   // Filter events sesuai tanggal yang dipilih
@@ -910,6 +921,7 @@ const KaiRoomsApp = () => {
   console.log("iniiiiiii", eventsForSelectedDate);
 
   const [now] = useState(new Date());
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
 
   const closeNotificationModal = () => {
     setIsModalNotificationOpen(false);
@@ -925,11 +937,27 @@ const KaiRoomsApp = () => {
 
       {/* Sidebar */}
       <aside className="fixed left-0 top-0 h-full w-60 bg-[#ffffff]/80 backdrop-blur-md border border-[#d6eaff] z-40 shadow-xl">
-        <div className="p-4 border-b border-gray-100/50">
-          <div className="flex items-center space-x-2 mb-3">
+        <div className="p-4">
+          <div className="flex items-center space-x-3">
             <div className="relative">
-              <div className="w-8 h-8 p-1 bg-[#1b68b0] rounded-lg flex items-center justify-center shadow-lg">
-                <img src="/images/KAI_ROOMS_logo.png" alt="" />
+              <div className="relative group">
+                {/* Main logo container dengan improved styling */}
+                <div className="w-9 h-9 p-[7px] bg-gradient-to-br from-[#1b68b0] to-[#144a87] rounded-xl flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 ring-2 ring-blue-100/50">
+                  <img
+                    src="/images/KAI_ROOMS_logo.png"
+                    alt="KAI Rooms Logo"
+                    className="w-full h-full object-contain filter brightness-0 invert"
+                  />
+                </div>
+
+                {/* Status indicator dengan animation */}
+                <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-gradient-to-r from-green-400 to-green-500 rounded-full border-2 border-white shadow-sm">
+                  <div className="absolute inset-0 bg-green-400 rounded-full animate-ping opacity-75"></div>
+                  <div className="relative w-full h-full bg-green-500 rounded-full"></div>
+                </div>
+
+                {/* Subtle glow effect */}
+                <div className="absolute inset-0 w-10 h-10 bg-[#1b68b0]/20 rounded-xl blur-md -z-10 group-hover:bg-[#1b68b0]/30 transition-all duration-300"></div>
               </div>
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-white"></div>
             </div>
@@ -982,7 +1010,7 @@ const KaiRoomsApp = () => {
 
           <div
             onClick={logoutHandle}
-            className="w-full mt-4 flex items-center space-x-3 px-3 py-2.5 text-[#ff7729] hover:bg-[#fff3ec] rounded-xl transition-all"
+            className="w-full cursor-pointer mt-4 flex items-center space-x-3 px-3 py-2.5 text-[#ff7729] hover:bg-[#fff3ec] rounded-xl transition-all"
           >
             <LogOut size={16} />
             <span className="font-medium text-sm">Log out</span>
@@ -995,17 +1023,13 @@ const KaiRoomsApp = () => {
         {/* Header */}
         <header className="bg-[#f0f0f2] backdrop-blur-xl border-b border-[#d6eaff] px-6 py-3 shadow-sm">
           <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-4">
-              <div>
-                <h1 className="text-2xl font-bold text-[#1b68b0] flex items-center space-x-2">
-                  <span>Jadwal</span>
-                </h1>
-                <p className="text-sm text-gray-600 flex items-center space-x-1">
-                  <Calendar size={14} />
-                  <span>{formatDate(now)}</span>
-                </p>
-              </div>
-            </div>
+            <Image
+              src="/images/KAI Danantara Logo.png"
+              alt="KAI Danantara Logo"
+              width={200}
+              height={40}
+              className="object-contain ml-4"
+            />
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2 bg-[#f0f0f2] px-3 py-2 rounded-lg border border-[#d6eaff]">
                 <Clock className="text-[#1b68b0]" size={16} />
@@ -1015,12 +1039,12 @@ const KaiRoomsApp = () => {
                 </div>
               </div>
               <div
-                className={`relative flex flex-col items-center `}
+                className={`relative flex flex-col items-center cursor-pointer`}
                 onClick={() => setIsModalNotificationOpen((prev) => !prev)}
               >
                 <Bell className="size-4 mt-4 text-black" />
                 {notificationCount > 0 && (
-                  <span className="absolute bg-red-600 top-[-5px] left-[45px] text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                  <span className="absolute bg-red-600 top-[5px] left-[25px] text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                     {notificationCount}
                   </span>
                 )}
@@ -1036,14 +1060,14 @@ const KaiRoomsApp = () => {
             <div className="flex flex-col md:flex-row gap-8">
               {/* Kalender */}
               <div className="bg-white rounded-xl p-6 flex-1 shadow-lg">
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center text-black justify-between mb-6">
                   <button
                     className="bg-[#ff7b00] text-white text-lg px-3 py-2 rounded-md cursor-pointer transition hover:bg-[#e06900] border-none"
                     onClick={() =>
-                      setCurrentTime(
+                      setCalendarMonth(
                         new Date(
-                          currentTime.getFullYear(),
-                          currentTime.getMonth() - 1,
+                          calendarMonth.getFullYear(),
+                          calendarMonth.getMonth() - 1,
                           1
                         )
                       )
@@ -1051,23 +1075,25 @@ const KaiRoomsApp = () => {
                   >
                     ‹
                   </button>
+
                   <h2 className="m-0 text-xl text-gray-900 font-bold">
-                    {currentTime.toLocaleString("id-ID", {
+                    {calendarMonth.toLocaleString("id-ID", {
                       month: "long",
                       year: "numeric",
                     })}
                   </h2>
+
                   <button
-                    className="bg-[#ff7b00] text-white text-lg px-3 py-2 rounded-md cursor-pointer transition hover:bg-[#e06900] border-none"
                     onClick={() =>
-                      setCurrentTime(
+                      setCalendarMonth(
                         new Date(
-                          currentTime.getFullYear(),
-                          currentTime.getMonth() + 1,
+                          calendarMonth.getFullYear(),
+                          calendarMonth.getMonth() + 1,
                           1
                         )
                       )
                     }
+                    className="bg-[#ff7b00] text-white text-lg px-3 py-2 rounded-md cursor-pointer transition hover:bg-[#e06900] border-none"
                   >
                     ›
                   </button>
@@ -1089,8 +1115,9 @@ const KaiRoomsApp = () => {
                   <div className="grid grid-cols-7 gap-2 bg-transparent">
                     {(() => {
                       // Generate days for current month
-                      const year = currentTime.getFullYear();
-                      const month = currentTime.getMonth();
+                      const year = calendarMonth.getFullYear();
+                      const month = calendarMonth.getMonth();
+
                       const firstDay = new Date(year, month, 1);
                       const lastDay = new Date(year, month + 1, 0);
                       const daysInMonth = lastDay.getDate();
@@ -1121,11 +1148,11 @@ const KaiRoomsApp = () => {
                             className={[
                               "flex items-center justify-center rounded-lg border-2 transition-all min-h-[45px] text-base cursor-pointer",
                               day
-                                ? "bg-[#f8f9fa] hover:bg-[#e9ecef] text-gray-900"
+                                ? isSelected
+                                  ? "bg-[#ff7b00] text-white font-bold border-[#e06900]" // active state
+                                  : "bg-[#f8f9fa] hover:bg-[#eaeaea] text-gray-900" // hover only if not selected
                                 : "bg-transparent cursor-default",
-                              isSelected
-                                ? "bg-[#ff7b00] !text-white font-bold border-[#e06900]"
-                                : "border-transparent",
+                              isSelected ? "" : "border-transparent",
                             ]
                               .filter(Boolean)
                               .join(" ")}
@@ -1166,55 +1193,91 @@ const KaiRoomsApp = () => {
                   {/* Content area dengan padding bottom untuk space */}
                   <div className="flex flex-col gap-4 pb-6">
                     {eventsForSelectedDate.length > 0 ? (
-                      eventsForSelectedDate.map((event, index) => (
-                        <div
-                          key={index}
-                          className="p-4 bg-[#f8f9fa] rounded-lg border-l-4 border-[#ff7b00] transition hover:-translate-y-0.5 hover:shadow-md"
-                        >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h4 className="font-medium text-gray-900">
-                                {event.title}
-                              </h4>
-                              <p className="text-sm text-gray-600">
-                                {/* Format waktu agar tampil HH:mm WIB */}
-                                {event.startTime
-                                  ? new Date(
-                                      event.startTime
-                                    ).toLocaleTimeString("id-ID", {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                      hour12: false,
-                                      timeZone: "Asia/Jakarta",
-                                    })
-                                  : "-"}
-                                {" - "}
-                                {event.endTime
-                                  ? new Date(event.endTime).toLocaleTimeString(
-                                      "id-ID",
-                                      {
+                      eventsForSelectedDate.map((event, index) => {
+                        const type = event.type ?? "Offline"; // default ke offline jika null
+                        return (
+                          <div
+                            key={index}
+                            className="p-4 bg-[#f8f9fa] rounded-lg border-l-4 border-[#ff7b00] transition hover:-translate-y-0.5 hover:shadow-md"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="font-medium text-gray-900">
+                                  {event.title}
+                                </h4>
+                                <p className="text-sm text-gray-600">
+                                  {event.startTime
+                                    ? new Date(
+                                        event.startTime
+                                      ).toLocaleTimeString("id-ID", {
                                         hour: "2-digit",
                                         minute: "2-digit",
                                         hour12: false,
                                         timeZone: "Asia/Jakarta",
-                                      }
-                                    )
-                                  : "-"}
-                                {" WIB"}
-                              </p>
-                              <p className="text-sm text-gray-600">
-                                Ruang {event.room.name}
-                              </p>
+                                      })
+                                    : "-"}
+                                  {" - "}
+                                  {event.endTime
+                                    ? new Date(
+                                        event.endTime
+                                      ).toLocaleTimeString("id-ID", {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                        hour12: false,
+                                        timeZone: "Asia/Jakarta",
+                                      })
+                                    : "-"}
+                                  {" WIB"}
+                                </p>
+
+                                {/* Tampilkan type rapat */}
+                                <p className="text-xs text-gray-500 italic mt-1">
+                                  Tipe Rapat: {type}
+                                </p>
+
+                                {/* Tampilkan lokasi/link berdasarkan type */}
+                                <div className="mt-1 space-y-1">
+                                  {(type === "Online" || type === "Hybrid") &&
+                                    event.linkMeet && (
+                                      <a
+                                        href={
+                                          event.linkMeet.startsWith(
+                                            "http://"
+                                          ) ||
+                                          event.linkMeet.startsWith("https://")
+                                            ? event.linkMeet
+                                            : `https://${event.linkMeet}`
+                                        }
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sm text-blue-600 hover:underline break-all"
+                                      >
+                                        {event.linkMeet.startsWith("http://") ||
+                                        event.linkMeet.startsWith("https://")
+                                          ? event.linkMeet
+                                          : `https://${event.linkMeet}`}
+                                      </a>
+                                    )}
+
+                                  {(type === "Offline" || type === "Hybrid") &&
+                                    event.room?.name && (
+                                      <p className="text-sm text-gray-600">
+                                        Ruang {event.room.name}
+                                      </p>
+                                    )}
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() => handleShowDetail(event)}
+                                className="px-3 py-1 cursor-pointer bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200 transition-colors"
+                              >
+                                Detail
+                              </button>
                             </div>
-                            <button
-                              onClick={() => handleShowDetail(event)}
-                              className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200 transition-colors"
-                            >
-                              Detail
-                            </button>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     ) : (
                       <p className="italic text-gray-400">
                         Tidak ada meeting pada tanggal ini.
@@ -1820,7 +1883,7 @@ const KaiRoomsApp = () => {
                             {meeting.time} - {meeting.endTime}
                           </p>
                           <p className="text-sm text-gray-600">
-                            Ruang {meeting.room.name}
+                            Ruang {meeting.room?.name}
                           </p>
                         </div>
                         <button
@@ -1841,15 +1904,19 @@ const KaiRoomsApp = () => {
 
       {showDetailPopup && selectedMeeting && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl">
+          <div
+            className="absolute inset-0 backdrop-blur-md"
+            onClick={closeModalDetail}
+          ></div>
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl">
             {/* Header */}
             <div className="flex justify-between items-center p-4 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">Detail Rapat</h2>
               <button
                 onClick={closeModalDetail}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-2 hover:bg-gray-100 cursor-pointer rounded-lg transition-colors"
               >
-                <X size={20} />
+                <X size={20} className="text-gray-500" />
               </button>
             </div>
 
@@ -1858,35 +1925,134 @@ const KaiRoomsApp = () => {
               {/* Info Cards Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {/* Location Card */}
-                <div className="bg-gradient-to-br from-[#f0f0f2] to-[#ffffff] border border-gray-200 rounded-2xl p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <div className="p-1.5 bg-[#1b68b0] text-white rounded-lg">
-                      <MapPin size={16} />
+                <div className="bg-gradient-to-br from-[#f0f0f2] to-[#ffffff] border border-gray-200 rounded-2xl p-4">
+                  {selectedMeeting.room && selectedMeeting.linkMeet ? (
+                    // HYBRID
+                    <>
+                      <div className="flex items-start justify-between mb-3">
+                        {/* Lokasi */}
+                        <div className="flex items-center space-x-3">
+                          <div className="p-1.5 bg-[#1b68b0] text-white rounded-lg">
+                            <MapPin size={16} />
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-gray-900 text-sm">
+                              Lokasi
+                            </h4>
+                            <p className="text-xs text-gray-600">
+                              {selectedMeeting.room.location}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Nama Ruang & Kapasitas */}
+                        <div className="text-right text-gray-800">
+                          <p className="font-medium text-sm">
+                            {selectedMeeting.room.name}
+                          </p>
+                          <p className="text-xs text-gray-600 mt-1">
+                            Kapasitas:{" "}
+                            <span className="font-medium">
+                              {selectedMeeting.room.capacity} orang
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Link Meet */}
+                      <div className="flex items-center space-x-3">
+                        <div className="p-1.5 bg-[#1b68b0] text-white rounded-lg">
+                          <LinkIcon size={16} />
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-gray-900 text-sm">
+                            Link Meeting
+                          </h4>
+                          <a
+                            href={
+                              selectedMeeting.linkMeet.startsWith("http://") ||
+                              selectedMeeting.linkMeet.startsWith("https://")
+                                ? selectedMeeting.linkMeet
+                                : `https://${selectedMeeting.linkMeet}`
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-600 hover:underline cursor-pointer break-all"
+                          >
+                            {selectedMeeting.linkMeet.startsWith("http://") ||
+                            selectedMeeting.linkMeet.startsWith("https://")
+                              ? selectedMeeting.linkMeet
+                              : `https://${selectedMeeting.linkMeet}`}
+                          </a>
+                        </div>
+                      </div>
+                    </>
+                  ) : selectedMeeting.room ? (
+                    // OFFLINE ONLY
+                    <>
+                      <div className="flex items-center space-x-3 mb-2">
+                        <div className="p-1.5 bg-[#1b68b0] text-white rounded-lg">
+                          <MapPin size={16} />
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-gray-900 text-sm">
+                            Lokasi
+                          </h4>
+                          <p className="text-xs text-gray-600">
+                            {selectedMeeting.room.location}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-gray-800">
+                        <p className="font-medium text-sm">
+                          {selectedMeeting.room.name}
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Kapasitas:{" "}
+                          <span className="font-medium">
+                            {selectedMeeting.room.capacity} orang
+                          </span>
+                        </p>
+                      </div>
+                    </>
+                  ) : selectedMeeting.linkMeet ? (
+                    // ONLINE ONLY
+                    <div className="flex items-center space-x-3">
+                      <div className="p-1.5 bg-[#1b68b0] text-white rounded-lg">
+                        <LinkIcon size={16} />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900 text-sm">
+                          Link Meeting
+                        </h4>
+                        <a
+                          href={
+                            selectedMeeting.linkMeet.startsWith("http://") ||
+                            selectedMeeting.linkMeet.startsWith("https://")
+                              ? selectedMeeting.linkMeet
+                              : `https://${selectedMeeting.linkMeet}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:underline cursor-pointer break-all"
+                        >
+                          {selectedMeeting.linkMeet.startsWith("http://") ||
+                          selectedMeeting.linkMeet.startsWith("https://")
+                            ? selectedMeeting.linkMeet
+                            : `https://${selectedMeeting.linkMeet}`}
+                        </a>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-900 text-sm">
-                        Lokasi
-                      </h4>
-                      <p className="text-xs text-gray-600">
-                        {selectedMeeting.room.location}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-gray-800">
-                    <p className="font-medium text-sm">
-                      {selectedMeeting.room.name}
+                  ) : (
+                    // No Info
+                    <p className="text-sm text-gray-600 italic">
+                      Informasi lokasi atau link tidak tersedia.
                     </p>
-                    <p className="text-xs text-gray-600 mt-1">
-                      Kapasitas:{" "}
-                      <span className="font-medium">
-                        {selectedMeeting.room.capacity} orang
-                      </span>
-                    </p>
-                  </div>
+                  )}
                 </div>
 
                 {/* Organizer Card */}
-                <div className="bg-gradient-to-br from-[#f0f0f2] to-[#ffffff] border border-gray-200 rounded-2xl p-4 hover:shadow-md transition-shadow">
+                <div className="bg-gradient-to-br from-[#f0f0f2] to-[#ffffff] border border-gray-200 rounded-2xl p-4">
                   <div className="flex items-center space-x-3 mb-2">
                     <div className="p-1.5 bg-[#ff7729] text-white rounded-lg">
                       <Building2 size={16} />
@@ -1904,7 +2070,7 @@ const KaiRoomsApp = () => {
                 </div>
 
                 {/* Participants Card */}
-                <div className="bg-gradient-to-br from-[#f0f0f2] to-[#ffffff] border border-gray-200 rounded-2xl p-4 hover:shadow-md transition-shadow">
+                <div className="bg-gradient-to-br from-[#f0f0f2] to-[#ffffff] border border-gray-200 rounded-2xl p-4">
                   <div className="flex items-center space-x-3 mb-2">
                     <div className="p-1.5 bg-[#1b68b0] text-white rounded-lg">
                       <Users size={16} />
@@ -1925,7 +2091,7 @@ const KaiRoomsApp = () => {
                 </div>
 
                 {/* Duration Card */}
-                <div className="bg-gradient-to-br from-[#f0f0f2] to-[#ffffff] border border-gray-200 rounded-2xl p-4 hover:shadow-md transition-shadow">
+                <div className="bg-gradient-to-br from-[#f0f0f2] to-[#ffffff] border border-gray-200 rounded-2xl p-4">
                   <div className="flex items-center space-x-3 mb-2">
                     <div className="p-1.5 bg-[#ff7729] text-white rounded-lg">
                       <Clock size={16} />
@@ -1969,12 +2135,12 @@ const KaiRoomsApp = () => {
             </div>
 
             {/* Enhanced Footer */}
-            <div className="px-8 py-4 bg-gradient-to-r from-[#f0f0f2] to-[#ffffff] border-t border-gray-200">
+            <div className="px-8 pb-4 bg-white border-gray-200 rounded-xl">
               <div className="flex items-center justify-end">
                 <div className="flex space-x-3">
                   <button
                     onClick={closeModalDetail}
-                    className="px-4 bg-[#ff7729] text-sm py-2 text-white rounded-xl transition-all duration-200 font-medium"
+                    className="px-4 bg-[#ff7729] cursor-pointer text-sm py-2 text-white rounded-xl transition-all duration-200 font-medium"
                   >
                     Tutup
                   </button>

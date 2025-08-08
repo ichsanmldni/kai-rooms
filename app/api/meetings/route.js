@@ -117,12 +117,13 @@ export async function POST(req) {
       createdById,
     } = body;
 
+    console.log("ini body", body);
+
     // Validasi input
     if (
       !namaRapat ||
       !jenisRapat ||
       !penyelenggara ||
-      !ruangan ||
       !tanggal ||
       !waktuMulai ||
       !waktuSelesai ||
@@ -132,6 +133,41 @@ export async function POST(req) {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
+    }
+
+    // 🔽 Validasi tambahan tergantung jenis rapat
+    if (jenisRapat === "Online" && !linkMeet) {
+      return new Response(
+        JSON.stringify({
+          message: "Link meeting wajib diisi untuk rapat online!",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    if (jenisRapat === "Hybrid" && (!ruangan || !linkMeet)) {
+      return new Response(
+        JSON.stringify({
+          message: "Ruangan dan link meeting wajib diisi untuk rapat hybrid!",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    if (jenisRapat === "Offline" && !ruangan) {
+      return new Response(
+        JSON.stringify({ message: "Ruangan wajib diisi untuk rapat offline!" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
 
     // Ambil data employee beserta user-nya
@@ -171,7 +207,8 @@ export async function POST(req) {
         startTime,
         endTime,
         type: jenisRapat,
-        roomId: ruangan,
+        roomId: jenisRapat === "Online" ? null : ruangan,
+        linkMeet: jenisRapat !== "Offline" ? linkMeet : null, // 🟢 hanya untuk Online & Hybrid
         createdById,
         organizerUnitId: penyelenggara,
         meetingAttendees: {
@@ -208,6 +245,7 @@ export async function POST(req) {
             userId: user.id,
             title: "Meeting Baru",
             message: `Kamu diundang ke meeting "${meeting.title}"`,
+            meetingId: meeting.id,
           });
         }
 

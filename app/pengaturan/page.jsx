@@ -12,12 +12,18 @@ import {
   fetchSettingById,
   updateSetting,
 } from "../../api-client/setting";
+import Image from "next/image";
+import { fetchNotificationList } from "../../api-client/notification";
+import NotificationModal from "../../components/NotificationModal";
 
 const Pengaturan = () => {
   const router = useRouter();
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [dataNotification, setDataNotification] = useState([]);
   const [activeTab, setActiveTab] = useState("profil");
   const [isLoading, setIsLoading] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState(null);
+  const [isModalNotificationOpen, setIsModalNotificationOpen] = useState(false);
   const fileInputRef = useRef(null);
   const [userData, setUserData] = useState({
     id: "",
@@ -34,12 +40,17 @@ const Pengaturan = () => {
 
   console.log("ini userdata", userData);
 
+  const [currentTime, setCurrentTime] = useState(new Date());
+
   const [notifikasi, setNotifikasi] = useState({
     id: "",
     emailNotifikasi: false,
     pengingatRapat: false,
   });
 
+  const closeNotificationModal = () => {
+    setIsModalNotificationOpen(false);
+  };
   console.log("ini notifikasi", notifikasi);
 
   async function fetchMe() {
@@ -61,6 +72,19 @@ const Pengaturan = () => {
       return null;
     }
   }
+  useEffect(() => {
+    if (userDataLogin && userDataLogin.id) {
+      async function loadNotification() {
+        try {
+          const data = await fetchNotificationList(userDataLogin.id);
+          setDataNotification(data);
+        } catch (error) {
+          alert(error.message);
+        }
+      }
+      loadNotification(userData.id);
+    }
+  }, [userDataLogin]);
 
   useEffect(() => {
     if (userDataLogin && userDataLogin.id) {
@@ -127,6 +151,17 @@ const Pengaturan = () => {
     }
     loadUser();
   }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    setNotificationCount(
+      dataNotification.filter((data) => data.isRead === false).length
+    );
+  }, [dataNotification]);
 
   const handleUploadAvatar = (event) => {
     const file = event.target.files[0];
@@ -338,8 +373,6 @@ const Pengaturan = () => {
       minute: "2-digit",
     });
   };
-
-  const [now] = useState(new Date());
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
       {/* Decorative background elements */}
@@ -350,11 +383,27 @@ const Pengaturan = () => {
 
       {/* Sidebar */}
       <aside className="fixed left-0 top-0 h-full w-60 bg-[#ffffff]/80 backdrop-blur-md border border-[#d6eaff] z-40 shadow-xl">
-        <div className="p-4 border-b border-gray-100/50">
-          <div className="flex items-center space-x-2 mb-3">
+        <div className="p-4">
+          <div className="flex items-center space-x-3">
             <div className="relative">
-              <div className="w-8 h-8 p-1 bg-[#1b68b0] rounded-lg flex items-center justify-center shadow-lg">
-                <img src="/images/KAI_ROOMS_logo.png" alt="" />
+              <div className="relative group">
+                {/* Main logo container dengan improved styling */}
+                <div className="w-9 h-9 p-[7px] bg-gradient-to-br from-[#1b68b0] to-[#144a87] rounded-xl flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 ring-2 ring-blue-100/50">
+                  <img
+                    src="/images/KAI_ROOMS_logo.png"
+                    alt="KAI Rooms Logo"
+                    className="w-full h-full object-contain filter brightness-0 invert"
+                  />
+                </div>
+
+                {/* Status indicator dengan animation */}
+                <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-gradient-to-r from-green-400 to-green-500 rounded-full border-2 border-white shadow-sm">
+                  <div className="absolute inset-0 bg-green-400 rounded-full animate-ping opacity-75"></div>
+                  <div className="relative w-full h-full bg-green-500 rounded-full"></div>
+                </div>
+
+                {/* Subtle glow effect */}
+                <div className="absolute inset-0 w-10 h-10 bg-[#1b68b0]/20 rounded-xl blur-md -z-10 group-hover:bg-[#1b68b0]/30 transition-all duration-300"></div>
               </div>
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-white"></div>
             </div>
@@ -408,7 +457,7 @@ const Pengaturan = () => {
 
           <div
             onClick={logoutHandle}
-            className="w-full mt-4 flex items-center space-x-3 px-3 py-2.5 text-[#ff7729] hover:bg-[#fff3ec] rounded-xl transition-all"
+            className="w-full cursor-pointer mt-4 flex items-center space-x-3 px-3 py-2.5 text-[#ff7729] hover:bg-[#fff3ec] rounded-xl transition-all"
           >
             <LogOut size={16} />
             <span className="font-medium text-sm">Log out</span>
@@ -421,23 +470,32 @@ const Pengaturan = () => {
           {/* Header */}
           <header className="bg-[#f0f0f2] backdrop-blur-xl border-b border-[#d6eaff] px-6 py-3 shadow-sm">
             <div className="flex justify-between items-center">
-              <div className="flex items-center space-x-4">
-                <div>
-                  <h1 className="text-2xl font-bold text-[#1b68b0] flex items-center space-x-2">
-                    <span>Pengaturan</span>
-                  </h1>
-                  <p className="text-sm text-gray-600 flex items-center space-x-1">
-                    <Calendar size={14} />
-                    <span>{formatDate(now)}</span>
-                  </p>
-                </div>
-              </div>
+              <Image
+                src="/images/KAI Danantara Logo.png"
+                alt="KAI Danantara Logo"
+                width={200}
+                height={40}
+                className="object-contain ml-4"
+              />
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2 bg-[#f0f0f2] px-3 py-2 rounded-lg border border-[#d6eaff]">
                   <Clock className="text-[#1b68b0]" size={16} />
                   <div className="text-sm font-bold text-gray-900">
-                    {formatTime(now)} <span className="font-normal">WIB</span>
+                    {formatTime(currentTime)}{" "}
+                    <span className="font-normal">WIB</span>
                   </div>
+                </div>
+                <div
+                  className={`relative flex flex-col items-center cursor-pointer`}
+                  onClick={() => setIsModalNotificationOpen((prev) => !prev)}
+                >
+                  <Bell className="size-4 mt-4 text-black" />
+                  {notificationCount > 0 && (
+                    <span className="absolute bg-red-600 top-[5px] left-[25px] text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                      {notificationCount}
+                    </span>
+                  )}
+                  <span className="text-xs">Notifikasi</span>
                 </div>
               </div>
             </div>
@@ -449,7 +507,7 @@ const Pengaturan = () => {
                 {Object.keys(tabLabels).map((tab, index) => (
                   <button
                     key={tab}
-                    className={`px-6 py-4 text-sm font-medium transition-all duration-200 relative ${
+                    className={`px-6 py-4 text-sm font-medium cursor-pointer transition-all duration-200 relative ${
                       activeTab === tab
                         ? "text-[#1b68b0] border-b-2 border-[#1b68b0] bg-[#1b68b0]/5"
                         : "text-gray-600 hover:text-[#1b68b0] hover:bg-gray-50"
@@ -473,7 +531,7 @@ const Pengaturan = () => {
 
                 <div className="mt-8 flex justify-center space-x-4 pt-6 border-t border-gray-200/50">
                   <button
-                    className="bg-gray-500 text-sm text-white px-6 py-2 rounded-lg hover:bg-gray-600 transition-colors shadow-sm"
+                    className="bg-gray-500 text-sm cursor-pointer text-white px-6 py-2 rounded-lg hover:bg-gray-600 transition-colors shadow-sm"
                     onClick={handleKembali}
                   >
                     Kembali
@@ -482,7 +540,7 @@ const Pengaturan = () => {
                     className={`px-6 py-2 rounded-lg text-sm transition-colors shadow-sm ${
                       isLoading
                         ? "bg-gray-400 text-white cursor-not-allowed"
-                        : "bg-[#1b68b0] text-white hover:bg-[#1b68b0]/90"
+                        : "bg-[#1b68b0] text-white cursor-pointer hover:bg-[#1b68b0]/90"
                     }`}
                     onClick={
                       activeTab === "profil"
@@ -501,6 +559,15 @@ const Pengaturan = () => {
           {/* Tab Navigation */}
         </div>
       </main>
+      {isModalNotificationOpen && (
+        <NotificationModal
+          dataNotifikasi={dataNotification}
+          className={`fixed top-[4rem] right-4 z-[9999] w-80 max-h-[calc(100vh-6rem)]`} // Adjusted z-index and positioning
+          onClose={closeNotificationModal}
+          setDataNotification={setDataNotification}
+          dataUser={userData}
+        />
+      )}
       <ToastContainer />
     </div>
   );

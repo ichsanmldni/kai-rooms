@@ -27,23 +27,50 @@ export function middleware(request) {
     return response;
   }
 
-  // ⚠️ Jika belum login (tidak ada token) dan bukan halaman login, redirect ke /login
-  if (!token && pathname !== "/login" && pathname !== "/register") {
+  // Handle admin routes
+  if (pathname.startsWith("/admin")) {
+    // If no token and trying to access admin pages except login, redirect to admin login
+    if (!token && pathname !== "/admin/login") {
+      return NextResponse.redirect(new URL("/admin/login", request.url));
+    }
+
+    // If has token and accessing admin login, redirect to admin dashboard
+    if (token && pathname === "/admin/login") {
+      try {
+        const decoded = jwtDecode(token);
+        // Optional: Check if user has admin role
+        // if (decoded.role !== 'admin') {
+        //   return NextResponse.redirect(new URL("/unauthorized", request.url));
+        // }
+        return NextResponse.redirect(new URL("/admin", request.url));
+      } catch (err) {
+        console.error("Token decode error:", err);
+        return NextResponse.redirect(new URL("/admin/login", request.url));
+      }
+    }
+    return response;
+  }
+
+  // Handle regular user routes
+  // Handle regular user routes
+  if (
+    !token &&
+    pathname !== "/login" &&
+    pathname !== "/register" &&
+    pathname !== "/login/lupa-password" &&
+    !pathname.startsWith("/login/reset-password")
+  ) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // ✅ Jika sudah login dan akses /login atau /, redirect ke /dashboard
   if (token) {
     try {
       const decoded = jwtDecode(token);
-      const userRole = decoded.role;
-
       if (pathname === "/login" || pathname === "/") {
         return NextResponse.redirect(new URL("/dashboard", request.url));
       }
     } catch (err) {
       console.error("Token decode error:", err);
-      // Jika token rusak, paksa logout
       return NextResponse.redirect(new URL("/login", request.url));
     }
   }
@@ -52,5 +79,5 @@ export function middleware(request) {
 }
 
 export const config = {
-  matcher: ["/((?!_next|favicon.ico|images|public|api).*)"], // Hindari eksekusi middleware di path tertentu
+  matcher: ["/((?!_next|favicon.ico|images|public|api).*)"],
 };

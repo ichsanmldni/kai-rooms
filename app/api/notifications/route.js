@@ -58,7 +58,7 @@ export async function GET(req) {
 export async function POST(req) {
   try {
     const body = await req.json();
-    const { userId, title, message } = body;
+    const { userId, title, message, meetingId } = body;
 
     if (!userId || !title || !message) {
       return new Response(
@@ -86,6 +86,7 @@ export async function POST(req) {
         userId,
         title,
         message,
+        meetingId,
       },
     });
 

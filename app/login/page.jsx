@@ -129,6 +129,15 @@ function LoginPage() {
           </a> */}
         {/* </div> */}
 
+        <div className="flex items-center text-sm mb-8 w-full">
+          <Link
+            href="/login/lupa-password"
+            className="text-[#5a60ea] ml-auto underline cursor-pointer"
+          >
+            Lupa Password?
+          </Link>
+        </div>
+
         <button
           className="w-full p-3 bg-[#5a60ea] text-white rounded-lg text-base font-medium mb-3 hover:bg-[#4a50d0] transition"
           onClick={handleLogin}

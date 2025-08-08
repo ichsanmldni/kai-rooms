@@ -32,6 +32,11 @@ const NotificationModal = ({
       console.log("ini updatedRes", updatedRes);
       setDataNotification(updatedRes);
     }
+    if (data.meetingId) {
+      router.push(`/dashboard?meeting_id=${data.meetingId}`);
+    } else if (!data.meetingId) {
+      router.push(`/dashboard`);
+    }
   };
 
   useEffect(() => {

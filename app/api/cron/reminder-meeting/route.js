@@ -38,6 +38,7 @@ export async function GET() {
           userId: user.id,
           title: "Meeting akan dimulai",
           message: `Meeting "${meeting.title}" akan dimulai dalam 15 menit.`,
+          meetingId: meeting.id,
         });
       }
     }

@@ -20,9 +20,6 @@ export async function GET(request, context) {
             organizerUnit: true,
             meetingAttendees: true,
           },
-          orderBy: {
-            startTime: "asc",
-          },
         },
       },
     });

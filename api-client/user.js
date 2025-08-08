@@ -29,3 +29,28 @@ export async function updateUser(payload) {
   });
   return res;
 }
+
+export async function lupaPasswordUser(payload) {
+  const res = await axios.post(`${BASE_URL}/lupa-password`, payload, {
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  return res;
+}
+export async function verifyTokenUser(payload) {
+  const res = await axios.post(`${BASE_URL}/verify-token`, payload, {
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  return res;
+}
+export async function resetPasswordUser(payload) {
+  const res = await axios.post(`${BASE_URL}/reset-password`, payload, {
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  return res;
+}

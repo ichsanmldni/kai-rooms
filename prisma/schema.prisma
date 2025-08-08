@@ -16,17 +16,28 @@ model User {
   role          Role           @default(USER)
   profileImage  String? // URL profile image
 
-  unit          Unit?          @relation(fields: [unitId], references: [id])
+  unit          Unit?          @relation(fields: [unitId], references: [id], onDelete: SetNull)
   unitId        String?        // Optional, jika tidak semua user punya unit
+
+  resetToken          String?
+  resetTokenExpires  DateTime?
 
   meetings      Meeting[]      @relation("UserMeetings")
   meetingsCreated Meeting[]    @relation("MeetingsCreatedBy")
 
   notifications Notification[]
-  settings      Setting        @relation(fields: [settingId], references: [id])
+  settings      Setting        @relation(fields: [settingId], references: [id], onDelete: Cascade)
   settingId     String         @unique
 
   employee      Employee?      // Relasi balik dari Employee
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+model Admin {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  password      String
 
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -45,7 +56,6 @@ model Room {
   capacity       Int
   isAvailable    Boolean   @default(true)
   autoCancel     Boolean   @default(false) // auto cancel if not used
-  cancelDeadline Int // minutes before meeting start
   meetings       Meeting[]
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -58,14 +68,17 @@ model Meeting {
   startTime    DateTime
   endTime      DateTime
   type         String?
-  room         Room       @relation(fields: [roomId], references: [id])
-  roomId       String
+  room         Room?       @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  roomId       String?
+  linkMeet     String?
   attendees    User[]     @relation("UserMeetings")
   participants Employee[] @relation("EmployeeMeetings")
-  createdBy    User       @relation("MeetingsCreatedBy", fields: [createdById], references: [id])
+  createdBy    User       @relation("MeetingsCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
   createdById  String     
 
-  organizerUnit   Unit    @relation("UnitOrganizedMeetings", fields: [organizerUnitId], references: [id])
+   notifications Notification[] @relation("MeetingNotifications")
+
+  organizerUnit   Unit    @relation("UnitOrganizedMeetings", fields: [organizerUnitId], references: [id], onDelete: Cascade)
   organizerUnitId String
 
   meetingAttendees MeetingAttendee[]
@@ -78,10 +91,9 @@ model Employee {
   id     String  @id @default(uuid())
   name   String
   email  String  @unique
-  user   User?   @relation(fields: [userId], references: [id])
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
   userId String? @unique
-
-  unit   Unit   @relation(fields: [unitId], references: [id])
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
   unitId String
 
   meetings         Meeting[]         @relation("EmployeeMeetings")
@@ -93,10 +105,12 @@ model Employee {
 
 model Notification {
   id        String   @id @default(uuid())
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   title     String
   message   String
+     meeting   Meeting? @relation("MeetingNotifications", fields: [meetingId], references: [id], onDelete: Cascade)
+  meetingId String?
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 }
@@ -113,10 +127,10 @@ model MeetingAttendee {
   id String @id @default(uuid())
 
   meetingId String
-  meeting   Meeting @relation(fields: [meetingId], references: [id])
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
 
   employeeId String
-  employee   Employee @relation(fields: [employeeId], references: [id])
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 }
 
 model Unit {
