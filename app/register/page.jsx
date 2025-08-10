@@ -4,6 +4,8 @@ import Link from "next/link";
 import React, { useState, useEffect } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import { fetchUnitList } from "../../api-client/unit";
+import { X } from "lucide-react";
+import { set } from "date-fns";
 
 function SignUpPage() {
   const [formDataRegister, setFormDataRegister] = useState({
@@ -17,6 +19,7 @@ function SignUpPage() {
 
   const [dataUnit, setDataUnit] = useState(null);
   const [loadingUnits, setLoadingUnits] = useState(true);
+  const [modalSnk, setModalSnk] = useState(false);
 
   useEffect(() => {
     async function loadUnit() {
@@ -252,7 +255,7 @@ function SignUpPage() {
           </div>
 
           {/* Checkbox - full width */}
-          <div className="flex items-center md:col-span-2 text-sm">
+          <div className="flex items-center md:col-span-2 text-sm mb-6">
             <input
               type="checkbox"
               id="terms"
@@ -263,9 +266,21 @@ function SignUpPage() {
                   agree: !prev.agree,
                 }))
               }
-              className="mr-2"
+              className="mr-3 mt-0.5 flex-shrink-0 cursor-pointer"
             />
-            <label htmlFor="terms">Saya menyetujui Syarat & Ketentuan</label>
+            <label htmlFor="terms" className="leading-relaxed">
+              Saya menyetujui{" "}
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  setModalSnk(true);
+                }}
+                className="text-blue-600 cursor-pointer hover:text-blue-800 underline font-medium"
+              >
+                Syarat & Ketentuan
+              </button>{" "}
+              yang berlaku
+            </label>
           </div>
 
           {/* Button - full width */}
@@ -290,7 +305,128 @@ function SignUpPage() {
           </Link>
         </p>
       </div>
+      {modalSnk && (
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          <div
+            className="absolute inset-0 bg-gradient-to-br from-blue-900/20 via-purple-900/10 to-pink-900/20 backdrop-blur-md"
+            onClick={() => setModalSnk(false)}
+          ></div>
+          <div className="relative bg-white/50 backdrop-blur-xl border border-white/30 rounded-3xl max-w-md w-full mx-4 md:max-h-[90vh] overflow-hidden shadow-2xl shadow-black/10">
+            {/* Modal Header */}
+            <div className="bg-white flex justify-between items-center p-6 border-b border-white/20">
+              <h3 className="text-lg font-semibold">Syarat & Ketentuan</h3>
+              <button
+                onClick={() => setModalSnk(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
 
+            {/* Modal Content */}
+            <div className="px-6 bg-white overflow-y-auto max-h-[60vh]">
+              <div className="space-y-4 text-sm leading-relaxed">
+                <section>
+                  <h4 className="font-semibold mb-2">
+                    1. Penerimaan Ketentuan
+                  </h4>
+                  <p>
+                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed
+                    do eiusmod tempor incididunt ut labore et dolore magna
+                    aliqua. Ut enim ad minim veniam, quis nostrud exercitation
+                    ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                  </p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold mb-2">2. Penggunaan Layanan</h4>
+                  <p>
+                    Duis aute irure dolor in reprehenderit in voluptate velit
+                    esse cillum dolore eu fugiat nulla pariatur. Excepteur sint
+                    occaecat cupidatat non proident, sunt in culpa qui officia
+                    deserunt mollit anim id est laborum.
+                  </p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold mb-2">3. Privasi dan Data</h4>
+                  <p>
+                    Sed ut perspiciatis unde omnis iste natus error sit
+                    voluptatem accusantium doloremque laudantium, totam rem
+                    aperiam, eaque ipsa quae ab illo inventore veritatis et
+                    quasi architecto beatae vitae dicta sunt.
+                  </p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold mb-2">
+                    4. Tanggung Jawab Pengguna
+                  </h4>
+                  <p>
+                    Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut
+                    odit aut fugit, sed quia consequuntur magni dolores eos qui
+                    ratione voluptatem sequi nesciunt neque porro quisquam est.
+                  </p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold mb-2">
+                    5. Pembatasan Tanggung Jawab
+                  </h4>
+                  <p>
+                    At vero eos et accusamus et iusto odio dignissimos ducimus
+                    qui blanditiis praesentium voluptatum deleniti atque
+                    corrupti quos dolores et quas molestias excepturi sint
+                    occaecati cupiditate non provident.
+                  </p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold mb-2">6. Perubahan Ketentuan</h4>
+                  <p>
+                    Similique sunt in culpa qui officia deserunt mollitia animi,
+                    id est laborum et dolorum fuga. Et harum quidem rerum
+                    facilis est et expedita distinctio nam libero tempore cum
+                    soluta nobis est eligendi.
+                  </p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold mb-2">7. Hukum yang Berlaku</h4>
+                  <p>
+                    Temporibus autem quibusdam et aut officiis debitis aut rerum
+                    necessitatibus saepe eveniet ut et voluptates repudiandae
+                    sint et molestiae non recusandae itaque earum rerum hic
+                    tenetur.
+                  </p>
+                </section>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex bg-white gap-3 p-6 border-t border-white/20">
+              <button
+                onClick={() => setModalSnk(false)}
+                className="flex-1 px-4 py-1 cursor-pointer text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Tutup
+              </button>
+              <button
+                onClick={() => {
+                  setFormDataRegister((prev) => ({
+                    ...prev,
+                    agree: true,
+                  }));
+                  setModalSnk(false);
+                }}
+                className="flex-1 px-4 cursor-pointer py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Saya Setuju
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <ToastContainer />
     </div>
   );
