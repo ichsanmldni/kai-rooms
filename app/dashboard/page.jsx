@@ -405,16 +405,36 @@ const KaiRoomsApp = () => {
     async function loadEmployee() {
       try {
         const data = await fetchEmployeeList();
-        setEmployeeOptions(
-          data.map((pegawai) => ({
+        console.log(data, "Ini employe list");
+
+        const grouped = data.reduce((acc, pegawai) => {
+          const unit = pegawai.unit.name || "Tanpa Unit";
+          if (!acc[unit]) {
+            acc[unit] = [];
+          }
+          acc[unit].push({
             label: pegawai.name,
             value: pegawai.id,
-          }))
+          });
+          return acc;
+        }, {});
+
+        const groupedOptions = Object.entries(grouped).map(
+          ([unit, employees]) => ({
+            label: unit,
+            options: [
+              { label: `Semua Karyawan Unit ${unit}`, value: `unit_${unit}` }, // opsi nama unit di atas
+              ...employees,
+            ],
+          })
         );
+
+        setEmployeeOptions(groupedOptions);
       } catch (error) {
         alert(error.message);
       }
     }
+
     async function loadUnit() {
       try {
         const data = await fetchUnitList();
@@ -2658,15 +2678,52 @@ const KaiRoomsApp = () => {
                       inputId="meeting-atendee"
                       name="pesertaRapat"
                       options={employeeOptions}
-                      value={employeeOptions.filter((opt) =>
-                        formDataBookingRoom.pesertaRapat?.includes(opt.value)
-                      )}
+                      value={(employeeOptions || [])
+                        .flatMap((group) => group.options || [])
+                        .filter((opt) =>
+                          formDataBookingRoom.pesertaRapat?.includes(opt.value)
+                        )}
                       onChange={(selectedOptions) => {
+                        let newSelection = [...(selectedOptions || [])];
+
+                        // Cek apakah ada yang memilih "Semua Karyawan Unit ..."
+                        const allUnitSelected = newSelection.find((opt) =>
+                          opt.value.startsWith("unit_")
+                        );
+                        if (allUnitSelected) {
+                          const unitName = allUnitSelected.value.replace(
+                            "unit_",
+                            ""
+                          );
+
+                          // Cari semua pegawai dari unit itu
+                          const unitGroup = employeeOptions.find(
+                            (group) => group.label === unitName
+                          );
+                          if (unitGroup) {
+                            // Gabungkan semua pegawai unit itu ke dalam pilihan
+                            newSelection = [
+                              ...newSelection.filter(
+                                (opt) => !opt.value.startsWith("unit_")
+                              ), // hapus tag unit
+                              ...unitGroup.options.filter(
+                                (opt) => !opt.value.startsWith("unit_")
+                              ), // ambil semua pegawai unit
+                            ];
+
+                            // Hilangkan duplikat berdasarkan value
+                            const seen = new Set();
+                            newSelection = newSelection.filter((opt) => {
+                              if (seen.has(opt.value)) return false;
+                              seen.add(opt.value);
+                              return true;
+                            });
+                          }
+                        }
+
                         setFormDataBookingRoom((prev) => ({
                           ...prev,
-                          pesertaRapat: selectedOptions
-                            ? selectedOptions.map((opt) => opt.value)
-                            : [],
+                          pesertaRapat: newSelection.map((opt) => opt.value),
                         }));
                       }}
                       isMulti
