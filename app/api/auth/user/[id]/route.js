@@ -3,7 +3,7 @@ import prisma from "../../../../../lib/prisma"; // Pastikan path ini benar
 
 export async function GET(request, context) {
   try {
-    const { id } = context.params;
+   const { id } = await context.params;
 
     if (!id) {
       return NextResponse.json(

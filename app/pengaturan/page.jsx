@@ -466,7 +466,7 @@ const Pengaturan = () => {
       </aside>
 
       <main className="ml-60 relative z-10">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-6x2 mx-auto">
           {/* Header */}
           <header className="bg-[#f0f0f2] backdrop-blur-xl border-b border-[#d6eaff] px-6 py-3 shadow-sm">
             <div className="flex justify-between items-center">

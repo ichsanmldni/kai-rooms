@@ -561,7 +561,7 @@ const KaiRoomsApp = () => {
             }),
             time,
             endTime: end,
-            ruangan: m.room.name,
+            ruangan: m.room?.name,
             linkMeet: m.linkMeet || "-",
           };
           nearestDiff = diff;

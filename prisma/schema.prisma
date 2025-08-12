@@ -25,6 +25,7 @@ model User {
   meetings      Meeting[]      @relation("UserMeetings")
   meetingsCreated Meeting[]    @relation("MeetingsCreatedBy")
 
+  
   notifications Notification[]
   settings      Setting        @relation(fields: [settingId], references: [id], onDelete: Cascade)
   settingId     String         @unique
