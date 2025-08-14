@@ -129,16 +129,16 @@ function LoginPage() {
           ROOMS.
         </p>
 
-        <input
-          type="email"
-          placeholder="Masukkan Email"
+       <input
+          type="text"
+          placeholder="Masukkan Email atau NIPP"
           className="w-full p-3 text-black rounded-md border border-gray-900 text-sm mb-3 focus:outline-none focus:border-[#7f5fff]"
-          value={formDataLogin.email}
+          value={formDataLogin.email} // tetap pakai 'email' di state untuk memudahkan
           onKeyDown={handleKeyDown}
           onChange={(e) =>
             setFormDataLogin((prev) => ({
               ...prev,
-              email: e.target.value,
+              email: e.target.value, // bisa email atau NIPP
             }))
           }
         />

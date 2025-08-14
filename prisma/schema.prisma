@@ -89,13 +89,14 @@ model Meeting {
 }
 
 model Employee {
-  id     String  @id @default(uuid())
-  name   String
-  email  String  @unique
-  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-  userId String? @unique
-  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  unitId String
+  id        String  @id @default(uuid())
+  nipp      String  @unique // Nomor Induk Pegawai
+  name      String
+  email     String  @unique
+  user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId    String? @unique
+  unit      Unit    @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  unitId    String
 
   meetings         Meeting[]         @relation("EmployeeMeetings")
   meetingAttendees MeetingAttendee[]
