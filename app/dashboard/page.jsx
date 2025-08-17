@@ -816,7 +816,14 @@ const KaiRoomsApp = () => {
       setIsLoadingSubmit(false);
 
       console.log("Form submitted:", meetingRes);
-      toast.success("Ruangan Berhasil Di Booking.");
+
+      toast.success(
+        `${
+          formDataBookingRoom.jenisRapat === "Online"
+            ? "Jadwal Meeting Berhasil Dibuat"
+            : "Ruangan Berhasil Di Booking"
+        }`
+      );
       const resMeetingUser = await fetchMeetingList(userData.id);
       const resMeetingAll = await fetchMeetingList();
       const data = await fetchRoomList();
@@ -1243,7 +1250,6 @@ const KaiRoomsApp = () => {
   };
 
   const getAvailableEndSlots = ({ selectedDate, startHHMM, room } = {}) => {
-    if (!startHHMM || !selectedDate) return [];
     if (!startHHMM || !selectedDate) return [];
 
     // pakai array yg sama
@@ -2672,7 +2678,11 @@ const KaiRoomsApp = () => {
                         }`}
                       >
                         <option value="">Pilih Jam</option>
-                        {getAvailableEndSlots().map((slot) => (
+                        {getAvailableEndSlots({
+                          selectedDate: new Date(formDataBookingRoom.tanggal),
+                          startHHMM: formDataBookingRoom.waktuMulai,
+                          jenisRapat: formDataBookingRoom.jenisRapat,
+                        }).map((slot) => (
                           <option key={slot} value={slot}>
                             {slot}
                           </option>
