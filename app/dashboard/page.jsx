@@ -1242,7 +1242,8 @@ const KaiRoomsApp = () => {
     });
   };
 
-  const getAvailableEndSlots = ({ selectedDate, startHHMM, room }) => {
+  const getAvailableEndSlots = ({ selectedDate, startHHMM, room } = {}) => {
+    if (!startHHMM || !selectedDate) return [];
     if (!startHHMM || !selectedDate) return [];
 
     // pakai array yg sama
