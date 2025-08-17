@@ -21,7 +21,7 @@ export default function RootLayout({ children }) {
         <meta name="description" content={metadata.description} />
         <link rel="icon" href={metadata.icons.icon} />
       </head>
-      <body className="custom-class">
+      <body>
         <Suspense fallback={<div>Loading...</div>}>{children}</Suspense>
       </body>
     </html>

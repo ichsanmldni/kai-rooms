@@ -18,28 +18,31 @@ import {
   CircleDot,
   AlertCircle,
   Activity,
+  X,
+  FileText,
 } from "lucide-react";
 import { useParams } from "next/navigation";
-import { fetchRoomById } from "../../../api-client/room";
+import { fetchRoomById, fetchRoomList } from "../../../api-client/room";
 import Image from "next/image";
+import { fetchMeetingList } from "../../../api-client/meeting";
 
 // Sample data structure based on your room data
 
-const timeSlots = [
-  { hour: 8, label: "08:00-09:00", start: "08:00", end: "09:00" },
-  { hour: 9, label: "09:00-10:00", start: "09:00", end: "10:00" },
-  { hour: 10, label: "10:00-11:00", start: "10:00", end: "11:00" },
-  { hour: 11, label: "11:00-12:00", start: "11:00", end: "12:00" },
-  { hour: 12, label: "12:00-13:00", start: "12:00", end: "13:00" },
-  { hour: 13, label: "13:00-14:00", start: "13:00", end: "14:00" },
-  { hour: 14, label: "14:00-15:00", start: "14:00", end: "15:00" },
-  { hour: 15, label: "15:00-16:00", start: "15:00", end: "16:00" },
-  { hour: 16, label: "16:00-17:00", start: "16:00", end: "17:00" },
-];
+const timeSlots = [];
+for (let hour = 0; hour < 24; hour++) {
+  const startTime = `${hour.toString().padStart(2, "0")}:00`;
+  const endTime = `${(hour + 1).toString().padStart(2, "0")}:00`;
+  timeSlots.push({
+    start: startTime,
+    end: endTime,
+    label: `${startTime}-${endTime}`,
+    key: startTime,
+  });
+}
 
 export default function StatusRuanganDetail() {
   const { id: roomId } = useParams();
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [dataRuangan, setDataRuangan] = useState(null);
   const [currentMeeting, setCurrentMeeting] = useState(null);
@@ -47,7 +50,24 @@ export default function StatusRuanganDetail() {
   const [todayMeetings, setTodayMeetings] = useState([]);
   const [upcomingMeetings, setUpcomingMeetings] = useState([]);
   const [nearestMeeting, setNearestMeeting] = useState(null);
+  const [dataRoomsSelectedTanggal, setDataRoomsSelectedTanggal] = useState([]);
+  const [dataMeetingsAll, setDataMeetingsAll] = useState([]);
+  const [selectedMeeting, setSelectedMeeting] = useState(null);
+  const [showDetailPopup, setShowDetailPopup] = useState(false);
 
+  useEffect(() => {
+    async function loadMeetingsAll() {
+      try {
+        const data = await fetchMeetingList();
+        setDataMeetingsAll(data);
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+    loadMeetingsAll();
+  }, []);
+
+  console.log("ini data rooms selected", dataRoomsSelectedTanggal);
   console.log("ini next", nextMeeting);
 
   // Background music for KAI
@@ -100,9 +120,9 @@ export default function StatusRuanganDetail() {
     // now.setDate(now.getDate() + 1); // ⬅️ ubah ke besok
     // now.setHours(10, 50, 0, 0); // ⬅️ set waktu ke 09:50
 
-    const todayMeetings = dataRuangan.meetings.filter((meeting) => {
+    const todayMeetings = dataRuangan?.meetings.filter((meeting) => {
       const meetingDate = new Date(meeting.startTime);
-      return meetingDate.toDateString() === now.toDateString();
+      return meetingDate?.toDateString() === now?.toDateString();
     });
 
     // Find current meeting
@@ -133,7 +153,7 @@ export default function StatusRuanganDetail() {
   console.log("ini data ruangan", dataRuangan);
   // Replace the existing nearest meeting logic in the useEffect:
   useEffect(() => {
-    if (!dataRuangan?.meetings || dataRuangan.meetings.length === 0) return;
+    if (!dataRuangan?.meetings || dataRuangan?.meetings.length === 0) return;
 
     const today = new Date();
     const todayList = [];
@@ -142,7 +162,7 @@ export default function StatusRuanganDetail() {
     let nearest = null;
     let nearestDiff = Infinity;
 
-    for (const m of dataRuangan.meetings) {
+    for (const m of dataRuangan?.meetings) {
       const startTime = new Date(m.startTime);
       const endTime = new Date(m.endTime);
       const tanggal = startTime.toISOString().split("T")[0];
@@ -221,15 +241,102 @@ export default function StatusRuanganDetail() {
     setNearestMeeting(nearest);
   }, [dataRuangan]);
 
+  function isSelectedTanggalInWIB(start, selectedDate) {
+    // Hilangkan waktu dari selectedDate
+    const selectedDateOnly = new Date(
+      selectedDate.getFullYear(),
+      selectedDate.getMonth(),
+      selectedDate.getDate()
+    );
+
+    // Hilangkan waktu dari start (waktu mulai meeting)
+    const meetingDateOnly = new Date(
+      start.getFullYear(),
+      start.getMonth(),
+      start.getDate()
+    );
+
+    return selectedDateOnly.getTime() === meetingDateOnly.getTime();
+  }
+
+  function getMeetingStatus(start, end) {
+    const now = new Date();
+    if (now < start) return "mendatang";
+    if (now >= start && now <= end) return "berlangsung";
+    return "selesai";
+  }
+
+  function transformRoomsSelectedTanggalAndSelectedRoom(data, selectedDate) {
+    const selectedRoomId = dataRuangan?.id;
+
+    // Temukan hanya ruangan yang dipilih
+    const room = data.find((room) => room.id === selectedRoomId);
+    if (!room) return []; // Kalau ruangan tidak ditemukan, return kosong
+
+    const meetingsByTime = {};
+
+    room.meetings?.forEach((meeting) => {
+      const start = new Date(meeting.startTime);
+      const end = new Date(meeting.endTime);
+
+      // Filter berdasarkan tanggal yang dipilih dalam WIB
+      if (!isSelectedTanggalInWIB(start, selectedDate)) return;
+
+      const startTimeStr = start.toTimeString().slice(0, 5); // "HH:mm"
+      const endTimeStr = end.toTimeString().slice(0, 5); // "HH:mm"
+      const duration = (end - start) / (1000 * 60 * 15); // dalam 15 menit sama seperti atas
+
+      meetingsByTime[startTimeStr] = {
+        id: meeting.id,
+        title: meeting.title,
+        startTime: startTimeStr, // 🔥 samain kayak atas
+        endTime: endTimeStr, // 🔥 samain kayak atas
+        participants: meeting.meetingAttendees?.length || 0,
+        status: getMeetingStatus(start, end),
+        priority: "medium", // isi sesuai skemamu
+        organizer: meeting.createdBy?.name || "Unknown",
+        description: meeting.description,
+        duration,
+      };
+    });
+
+    return [
+      {
+        id: room.id,
+        name: room.name,
+        location: room.location,
+        capacity: room.capacity,
+        meetings: meetingsByTime,
+      },
+    ];
+  }
+
+  useEffect(() => {
+    async function loadRooms() {
+      try {
+        const data = await fetchRoomList(); // pastikan ini include meetings
+        const transformedSelectedTanggal =
+          transformRoomsSelectedTanggalAndSelectedRoom(data, selectedDate);
+        console.log("ini data rooms asli", data);
+        console.log("inii trans selected tanggal", transformedSelectedTanggal);
+        setDataRoomsSelectedTanggal(transformedSelectedTanggal);
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    loadRooms();
+  }, [dataRuangan, selectedDate]);
+
   const formatTime = (date) => {
-    const hours = date.getHours().toString().padStart(2, "0");
-    const minutes = date.getMinutes().toString().padStart(2, "0");
-    const seconds = date.getSeconds().toString().padStart(2, "0");
+    const hours = date?.getHours().toString().padStart(2, "0");
+    const minutes = date?.getMinutes().toString().padStart(2, "0");
+    const seconds = date?.getSeconds().toString().padStart(2, "0");
     return `${hours}:${minutes}:${seconds}`;
   };
 
   const formatDate = (date) => {
-    return date.toLocaleDateString("id-ID", {
+    return date?.toLocaleDateString("id-ID", {
       weekday: "long",
       year: "numeric",
       month: "long",
@@ -265,7 +372,7 @@ export default function StatusRuanganDetail() {
     const slotTime = new Date(selectedDate);
     slotTime.setHours(hour, 0, 0, 0);
 
-    const meeting = dataRuangan.meetings.find((meeting) => {
+    const meeting = dataRuangan?.meetings.find((meeting) => {
       const start = new Date(meeting.startTime);
       const end = new Date(meeting.endTime);
       return (
@@ -340,7 +447,7 @@ export default function StatusRuanganDetail() {
     const slotTime = new Date(selectedDate);
     slotTime.setHours(hour, 0, 0, 0);
 
-    return dataRuangan.meetings.find((meeting) => {
+    return dataRuangan?.meetings.find((meeting) => {
       const start = new Date(meeting.startTime);
       const end = new Date(meeting.endTime);
       return (
@@ -386,6 +493,228 @@ export default function StatusRuanganDetail() {
     } else {
       return `${minutes} menit lagi`;
     }
+  };
+
+  console.log("ini selected data", selectedDate);
+
+  function splitSlotsByMeetings(timeSlots, room) {
+    if (!room || !room.meetings) return timeSlots;
+
+    const refinedSlots = [];
+    const seen = new Set();
+
+    const today = new Date();
+
+    const isToday = today.toDateString() === selectedDate.toDateString();
+    const now = new Date();
+
+    const makeDate = (hhmm = "00:00", base = selectedDate) => {
+      const parts = (hhmm || "00:00").split(":");
+      const h = Number(parts[0] || 0);
+      const m = Number(parts[1] || 0);
+      const d = new Date(base);
+      d.setHours(h, m, 0, 0);
+      return d;
+    };
+
+    console.log(timeSlots);
+
+    if (timeSlots.length > 0) {
+      for (const { start: slotStart, end: slotEnd } of timeSlots) {
+        console.log(slotStart, slotEnd);
+        let slotStartDate = makeDate(slotStart);
+        let slotEndDate = makeDate(slotEnd);
+
+        if (slotEndDate <= slotStartDate) {
+          slotEndDate = new Date(slotEndDate.getTime() + 24 * 60 * 60000);
+        }
+
+        let cuts = [slotStartDate.getTime(), slotEndDate.getTime()];
+
+        // Potong oleh meeting
+        for (const meeting of Object.values(room.meetings)) {
+          const mStart = makeDate(meeting.startTime || "00:00");
+          let mEnd = makeDate(meeting.endTime || "00:00");
+          if (mEnd <= mStart) mEnd.setDate(mEnd.getDate() + 1);
+
+          if (mStart < slotEndDate && mEnd > slotStartDate) {
+            cuts.push(mStart.getTime(), mEnd.getTime());
+          }
+        }
+
+        // Potong oleh quarter sekarang hanya kalau tanggal = hari ini
+        // Potong oleh quarter sekarang hanya kalau selectedDate = hari ini
+        if (isToday) {
+          const quarterStart = new Date(now);
+          quarterStart.setMinutes(Math.floor(now.getMinutes() / 15) * 15, 0, 0);
+          const quarterEnd = new Date(quarterStart.getTime() + 15 * 60000);
+
+          // Hanya tambahin cut kalau memang ada di dalam slot
+          if (quarterStart >= slotStartDate && quarterStart < slotEndDate) {
+            cuts.push(quarterStart.getTime());
+          }
+          if (quarterEnd > slotStartDate && quarterEnd <= slotEndDate) {
+            cuts.push(quarterEnd.getTime());
+          }
+        }
+
+        cuts = [...new Set(cuts)].sort((a, b) => a - b);
+
+        for (let i = 0; i < cuts.length - 1; i++) {
+          const subStart = new Date(cuts[i]);
+          const subEnd = new Date(cuts[i + 1]);
+
+          const overlappedMeeting = Object.values(room.meetings).find(
+            (meeting) => {
+              const mStart = makeDate(meeting.startTime);
+              const mEnd = makeDate(meeting.endTime);
+              if (mEnd <= mStart) mEnd.setDate(mEnd.getDate() + 1);
+              return mStart < subEnd && mEnd > subStart;
+            }
+          );
+
+          const keyUnique = `${subStart.toTimeString().slice(0, 5)}-${subEnd
+            .toTimeString()
+            .slice(0, 5)}-${overlappedMeeting?.id || "free"}`;
+
+          if (!seen.has(keyUnique)) {
+            seen.add(keyUnique);
+
+            refinedSlots.push({
+              start: subStart.toTimeString().slice(0, 5),
+              end: subEnd.toTimeString().slice(0, 5),
+              label: `${subStart.toTimeString().slice(0, 5)}-${subEnd
+                .toTimeString()
+                .slice(0, 5)}`,
+              key: subStart.toTimeString().slice(0, 5),
+              meetingId: overlappedMeeting?.id || null,
+            });
+          }
+        }
+      }
+    }
+
+    return refinedSlots;
+  }
+
+  const formatDuration = (duration) => {
+    if (!duration) return "0m";
+
+    const totalMinutes = duration * 15; // karena 1 slot = 15 menit
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+    if (hours > 0) return `${hours}h`;
+    return `${minutes}m`;
+  };
+
+  const getSlotStatus = (room, timeSlot) => {
+    const meeting = room?.meetings?.[timeSlot];
+    if (!meeting) return "available";
+
+    const currentHour = new Date().getHours();
+    const slotHour = parseInt(timeSlot.split(":")[0]);
+    const endHour = slotHour + meeting.duration;
+
+    if (currentHour >= slotHour && currentHour < endHour) {
+      return "ongoing";
+    } else if (currentHour < slotHour) {
+      return "upcoming";
+    } else {
+      return "finished";
+    }
+  };
+
+  const isSlotSpanned = (room, timeSlot) => {
+    if (!room || !timeSlot || !room.meetings) return false;
+
+    const slotHour = parseInt(timeSlot.split(":")[0]);
+
+    for (const [startTime, meeting] of Object.entries(room.meetings)) {
+      const startHour = parseInt(startTime.split(":")[0]);
+      const durationInHours = Math.ceil(meeting.duration / 4); // konversi 15 menit -> jam
+      const endHour = startHour + durationInHours;
+
+      if (slotHour > startHour && slotHour < endHour) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const getSlotSpan = (meeting) => {
+    if (!meeting?.duration) return 1;
+
+    // Kalau durasi <= 1 jam (4 unit 15m), tetap 1 grid
+    if (meeting.duration <= 4) return 1;
+
+    // Kalau lebih dari 1 jam → tiap 4 unit = 1 grid
+    return Math.ceil(meeting.duration / 4);
+  };
+
+  const getSlotColor = (status, meeting) => {
+    if (status === "available") {
+      return "bg-gray-50 hover:bg-green-50 border-gray-200 hover:border-green-300";
+    }
+
+    const priorityColors = {
+      high: "border-red-300",
+      medium: "border-yellow-300",
+      low: "border-green-300",
+    };
+
+    switch (status) {
+      case "ongoing":
+        return `bg-green-100 border-2 ${
+          priorityColors[meeting?.priority]
+        } text-green-800`;
+      case "upcoming":
+        return `bg-blue-100 border-2 ${
+          priorityColors[meeting?.priority]
+        } text-blue-800`;
+      case "finished":
+        return `bg-gray-100 border-2 ${
+          priorityColors[meeting?.priority]
+        } text-gray-600`;
+      default:
+        return "bg-gray-50 hover:bg-green-50 border-gray-200";
+    }
+  };
+
+  const handleSlotClick = (room, timeSlot) => {
+    console.log(
+      "ini meeting raw",
+      room,
+      timeSlot,
+      room?.meetings?.[timeSlot.start]
+    );
+
+    if (room?.meetings?.[timeSlot.start]) {
+      // Kalau sudah ada meeting → tampilkan detail, bukan booking baru
+      handleShowDetail(room?.meetings?.[timeSlot.start]);
+      return;
+    }
+  };
+
+  const handleShowDetail = (meeting) => {
+    const fullMeeting = dataMeetingsAll.find((m) => m.id === meeting.id);
+    console.log("ini selected cuy", fullMeeting);
+    if (fullMeeting) {
+      setSelectedMeeting(fullMeeting);
+    } else {
+      // fallback ke meeting yang dikirim kalau tidak ketemu (optional)
+      setSelectedMeeting(meeting);
+    }
+    setShowDetailPopup(true);
+  };
+
+  console.log("ini selected meeting", selectedMeeting);
+
+  const closeModalDetail = () => {
+    setSelectedMeeting(null);
+    setShowDetailPopup(false);
   };
 
   return (
@@ -965,83 +1294,158 @@ export default function StatusRuanganDetail() {
 
                     {/* Time Slots Grid */}
                     <div className="p-4">
-                      <div className="grid grid-cols-5 md:grid-cols-6 lg:grid-cols-9 gap-2">
-                        {timeSlots.map((slot) => {
-                          const status = getTimeSlotStatus(slot.hour);
-                          const meeting = getMeetingAtTime(slot.hour);
-                          const now = currentTime;
-                          // const now = new Date();
+                      <div className="grid grid-cols-18 gap-1 mt-2">
+                        {splitSlotsByMeetings(
+                          timeSlots,
+                          dataRoomsSelectedTanggal?.[0]
+                        ).map((timeSlot) => {
+                          const meeting =
+                            dataRoomsSelectedTanggal?.[0]?.meetings?.[
+                              timeSlot.key
+                            ];
+                          const isSpanned = isSlotSpanned(
+                            dataRoomsSelectedTanggal?.[0],
+                            timeSlot.key
+                          );
+
+                          if (isSpanned) return null;
+
+                          const status = meeting
+                            ? getSlotStatus(
+                                dataRoomsSelectedTanggal?.[0],
+                                timeSlot.key
+                              )
+                            : "available";
+                          const colSpan = meeting ? getSlotSpan(meeting) : 1;
+                          const now = new Date();
+
+                          // Ambil jam dan menit dari timeSlot.key (format "HH:mm")
+                          const [slotHour, slotMinute] = timeSlot.key
+                            .split(":")
+                            .map(Number);
+
+                          // Gabungkan tanggal hari ini dengan jam slot
                           const slotTime = new Date(selectedDate);
-                          slotTime.setHours(slot.hour, 0, 0, 0);
+                          slotTime.setHours(slotHour, slotMinute, 0, 0);
+
+                          const parseHHMM = (hhmm) => {
+                            const [h, m] = hhmm.split(":").map(Number);
+                            const d = new Date(selectedDate);
+                            d.setHours(h, m, 0, 0);
+                            return d;
+                          };
+
+                          let slotStart = parseHHMM(timeSlot.start);
+                          let slotEnd = parseHHMM(timeSlot.end);
+                          if (slotEnd <= slotStart)
+                            slotEnd.setDate(slotEnd.getDate() + 1);
+
                           const isCurrentTime =
-                            now.toDateString() === slotTime.toDateString() &&
-                            now.getHours() === slotTime.getHours();
-                          const isPastTime = slotTime < now;
+                            now >= slotStart && now < slotEnd;
+                          const isPastTime = now >= slotEnd;
+
+                          const isDisabled =
+                            (isPastTime && !meeting) ||
+                            (isCurrentTime && !meeting);
+
+                          const isUnavailable = isPastTime || isCurrentTime;
 
                           return (
-                            <div
-                              key={slot.hour}
+                            <button
+                              key={timeSlot.key}
+                              onClick={() =>
+                                handleSlotClick(
+                                  dataRoomsSelectedTanggal[0],
+                                  timeSlot
+                                )
+                              }
+                              disabled={meeting && !isPastTime ? false : true}
                               className={`
-                          relative p-2 rounded-xl transition-all min-h-[70px] border
-                          ${
-                            status === "occupied"
-                              ? "bg-red-50 border-red-200 text-red-700"
-                              : ""
-                          }
-                          ${
-                            status === "current"
-                              ? "bg-[#ff7729]/10 border-[#ff7729]/20 text-[#ff7729]"
-                              : ""
-                          }
-                          ${
-                            status === "past"
-                              ? "bg-gray-50 border-gray-200 text-gray-400"
-                              : ""
-                          }
-                          ${
-                            status === "available"
-                              ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                              : ""
-                          }
-                          ${isCurrentTime ? "ring-2 ring-[#1b68b0]" : ""}
+                          group relative p-1.5 rounded text-xs transition-all min-h-[50px] border
+                          bg-gray-50 border-gray-200 ${getSlotColor(
+                            status,
+                            meeting
+                          )}
+                          ${isCurrentTime ? "ring-1 ring-blue-500" : ""}
                           ${
                             isPastTime && !meeting
-                              ? "opacity-80"
-                              : "transform transition-all"
-                          }
+                              ? "opacity-40 cursor-not-allowed"
+                              : "hover:shadow-sm"
+                          } min-h-[80px] ${
+                                meeting && !isPastTime && "cursor-pointer"
+                              }
                         `}
+                              style={
+                                colSpan > 1
+                                  ? { gridColumn: `span ${colSpan}` }
+                                  : {}
+                              }
                             >
+                              {/* Tooltip on hover */}
+                              <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 border border-white/10 backdrop-blur-md bg-white/10 opacity-0 text-black text-[10px] rounded shadow group-hover:opacity-100 transition-opacity z-10">
+                                {meeting &&
+                                  !isPastTime &&
+                                  "Lihat Detail Meeting"}
+                              </div>
                               {/* Current Time Indicator */}
                               {isCurrentTime && (
-                                <div className="absolute -top-1 left-1/2 transform -translate-x-1/2">
-                                  <div className="bg-blue-500 text-white text-[10px] px-2 py-0.5 rounded-full font-medium">
+                                <div className="absolute -top-0.5 left-1/2 transform -translate-x-1/2">
+                                  <div className="bg-blue-500 text-white text-[6px] px-0.5 py-0.5 rounded-full font-bold">
                                     Sekarang
                                   </div>
                                 </div>
                               )}
 
                               <div className="text-center">
-                                <div className="font-mono text-[10px] mb-2 font-medium opacity-80">
-                                  {slot.label}
+                                <div className="font-mono text-[10px] mb-1 font-semibold">
+                                  {meeting && colSpan > 1
+                                    ? `${timeSlot.start}-${meeting.endTime}`
+                                    : timeSlot.label}
                                 </div>
 
                                 {meeting ? (
-                                  <div className="space-y-1">
-                                    <div className="font-medium text-xs leading-tight truncate">
+                                  <div className="space-y-0.5">
+                                    <div className="font-medium text-[10px] leading-tight truncate">
                                       {meeting.title}
                                     </div>
-                                    <div className="text-[10px] flex justify-center items-center gap-1 opacity-75">
+                                    <div className="text-[8px] flex justify-center opacity-75">
+                                      {meeting.participants}
                                       <Users size={10} />
-                                      <span>{meeting.participants}</span>
+                                    </div>
+                                    <div className="text-[8px] opacity-50">
+                                      {formatDuration(meeting.duration)}
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="text-[10px] font-medium opacity-60">
-                                    {isPastTime ? "Telah Lewat" : "Tersedia"}
+                                  <div className="text-gray-400 text-[10px]">
+                                    {isUnavailable ? "Telah Lewat" : "Tersedia"}
                                   </div>
                                 )}
                               </div>
-                            </div>
+
+                              {/* Priority dot */}
+                              {meeting && meeting.priority && (
+                                <div
+                                  className={`absolute top-1 right-1 w-1 h-1 rounded-full ${
+                                    meeting.priority === "high"
+                                      ? "bg-red-500"
+                                      : meeting.priority === "medium"
+                                      ? "bg-yellow-500"
+                                      : "bg-green-500"
+                                  }`}
+                                />
+                              )}
+
+                              {/* Duration bar */}
+                              {meeting && colSpan > 1 && (
+                                <div className="absolute bottom-0.5 left-0.5 right-0.5 h-0.5 bg-black bg-opacity-20 rounded-full">
+                                  <div
+                                    className="h-full bg-white bg-opacity-50 rounded-full"
+                                    style={{ width: "100%" }}
+                                  ></div>
+                                </div>
+                              )}
+                            </button>
                           );
                         })}
                       </div>
@@ -1063,6 +1467,265 @@ export default function StatusRuanganDetail() {
           </div>
         </div>
       </div>
+      {showDetailPopup && selectedMeeting && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div
+            className="absolute inset-0 backdrop-blur-md"
+            onClick={closeModalDetail}
+          ></div>
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl">
+            {/* Header */}
+            <div className="flex justify-between items-center p-4 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-900">Detail Rapat</h2>
+              <button
+                onClick={closeModalDetail}
+                className="p-2 hover:bg-gray-100 cursor-pointer rounded-lg transition-colors"
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+
+            {/* Content Area */}
+            <div className="px-6 py-4 space-y-4 overflow-y-auto max-h-[calc(95vh-200px)]">
+              {/* Info Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* Location Card */}
+                <div className="bg-gradient-to-br from-[#f0f0f2] to-[#ffffff] border border-gray-200 rounded-2xl p-4">
+                  {selectedMeeting.room && selectedMeeting.linkMeet ? (
+                    // HYBRID
+                    <>
+                      <div className="flex items-start justify-between mb-3">
+                        {/* Lokasi */}
+                        <div className="flex items-center space-x-3">
+                          <div className="p-1.5 bg-[#1b68b0] text-white rounded-lg">
+                            <MapPin size={16} />
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-gray-900 text-sm">
+                              Lokasi
+                            </h4>
+                            <p className="text-xs text-gray-600">
+                              {selectedMeeting.room.location}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Nama Ruang & Kapasitas */}
+                        <div className="text-right text-gray-800">
+                          <p className="font-medium text-sm">
+                            {selectedMeeting.room.name}
+                          </p>
+                          <p className="text-xs text-gray-600 mt-1">
+                            Kapasitas:{" "}
+                            <span className="font-medium">
+                              {selectedMeeting.room.capacity} orang
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Link Meet */}
+                      <div className="flex items-center space-x-3">
+                        <div className="p-1.5 bg-[#1b68b0] text-white rounded-lg">
+                          <LinkIcon size={16} />
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-gray-900 text-sm">
+                            Link Meeting
+                          </h4>
+                          <a
+                            href={
+                              selectedMeeting.linkMeet.startsWith("http://") ||
+                              selectedMeeting.linkMeet.startsWith("https://")
+                                ? selectedMeeting.linkMeet
+                                : `https://${selectedMeeting.linkMeet}`
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-600 hover:underline cursor-pointer break-all"
+                          >
+                            {selectedMeeting.linkMeet.startsWith("http://") ||
+                            selectedMeeting.linkMeet.startsWith("https://")
+                              ? selectedMeeting.linkMeet
+                              : `https://${selectedMeeting.linkMeet}`}
+                          </a>
+                        </div>
+                      </div>
+                    </>
+                  ) : selectedMeeting.room ? (
+                    // OFFLINE ONLY
+                    <>
+                      <div className="flex items-center space-x-3 mb-2">
+                        <div className="p-1.5 bg-[#1b68b0] text-white rounded-lg">
+                          <MapPin size={16} />
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-gray-900 text-sm">
+                            Lokasi
+                          </h4>
+                          <p className="text-xs text-gray-600">
+                            {selectedMeeting.room.location}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-gray-800">
+                        <p className="font-medium text-sm">
+                          {selectedMeeting.room.name}
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Kapasitas:{" "}
+                          <span className="font-medium">
+                            {selectedMeeting.room.capacity} orang
+                          </span>
+                        </p>
+                      </div>
+                    </>
+                  ) : selectedMeeting.linkMeet ? (
+                    // ONLINE ONLY
+                    <div className="flex items-center space-x-3">
+                      <div className="p-1.5 bg-[#1b68b0] text-white rounded-lg">
+                        <LinkIcon size={16} />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900 text-sm">
+                          Link Meeting
+                        </h4>
+                        <a
+                          href={
+                            selectedMeeting.linkMeet.startsWith("http://") ||
+                            selectedMeeting.linkMeet.startsWith("https://")
+                              ? selectedMeeting.linkMeet
+                              : `https://${selectedMeeting.linkMeet}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:underline cursor-pointer break-all"
+                        >
+                          {selectedMeeting.linkMeet.startsWith("http://") ||
+                          selectedMeeting.linkMeet.startsWith("https://")
+                            ? selectedMeeting.linkMeet
+                            : `https://${selectedMeeting.linkMeet}`}
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    // No Info
+                    <p className="text-sm text-gray-600 italic">
+                      Informasi lokasi atau link tidak tersedia.
+                    </p>
+                  )}
+                </div>
+
+                {/* Organizer Card */}
+                <div className="bg-gradient-to-br from-[#f0f0f2] to-[#ffffff] border border-gray-200 rounded-2xl p-4">
+                  <div className="flex items-center space-x-3 mb-2">
+                    <div className="p-1.5 bg-[#ff7729] text-white rounded-lg">
+                      <Building2 size={16} />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900 text-sm">
+                        Penyelenggara
+                      </h4>
+                      <p className="text-xs text-gray-600">Unit Kerja</p>
+                    </div>
+                  </div>
+                  <p className="text-gray-800 font-medium text-sm">
+                    {selectedMeeting.organizerUnit.name}
+                  </p>
+                </div>
+
+                {/* Participants Card */}
+                <div className="bg-gradient-to-br from-[#f0f0f2] to-[#ffffff] border border-gray-200 rounded-2xl p-4">
+                  <div className="flex items-center space-x-3 mb-2">
+                    <div className="p-1.5 bg-[#1b68b0] text-white rounded-lg">
+                      <Users size={16} />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900 text-sm">
+                        Peserta
+                      </h4>
+                      <p className="text-xs text-gray-600">Total Peserta</p>
+                    </div>
+                  </div>
+                  <p className="text-gray-800">
+                    <span className="text-xl font-bold text-[#1b68b0]">
+                      {selectedMeeting.meetingAttendees.length}
+                    </span>
+                    <span className="text-gray-600 ml-1 text-sm">peserta</span>
+                  </p>
+                </div>
+
+                {/* Duration Card */}
+                <div className="bg-gradient-to-br from-[#f0f0f2] to-[#ffffff] border border-gray-200 rounded-2xl p-4">
+                  <div className="flex items-center space-x-3 mb-2">
+                    <div className="p-1.5 bg-[#ff7729] text-white rounded-lg">
+                      <Clock size={16} />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900 text-sm">
+                        Durasi
+                      </h4>
+                      <p className="text-xs text-gray-600">Waktu Rapat</p>
+                    </div>
+                  </div>
+                  <p className="text-gray-800 font-medium text-sm">
+                    {Math.round(
+                      (new Date(selectedMeeting.endTime) -
+                        new Date(selectedMeeting.startTime)) /
+                        (1000 * 60)
+                    )}{" "}
+                    menit
+                  </p>
+                  <p className="text-gray-500 text-xs mt-1">
+                    {new Date(selectedMeeting.startTime).toLocaleTimeString(
+                      [],
+                      { hour: "2-digit", minute: "2-digit" }
+                    )}{" "}
+                    -{" "}
+                    {new Date(selectedMeeting.endTime).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+              </div>
+
+              {/* Description Section */}
+              {selectedMeeting.description && (
+                <div className="bg-gradient-to-br from-[#f0f0f2] to-[#ffffff] border border-gray-200 rounded-2xl p-4">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <div className="p-1.5 bg-[#1b68b0] text-white rounded-lg">
+                      <FileText size={16} />
+                    </div>
+                    <h4 className="font-semibold text-gray-900 text-sm">
+                      Deskripsi Rapat
+                    </h4>
+                  </div>
+                  <div className="bg-[#ffffff] rounded-xl p-3 border border-gray-100">
+                    <p className="text-gray-800 leading-relaxed whitespace-pre-line text-sm">
+                      {selectedMeeting.description}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Enhanced Footer */}
+            <div className="px-8 pb-4 bg-white border-gray-200 rounded-xl">
+              <div className="flex items-center justify-end">
+                <div className="flex space-x-3">
+                  <button
+                    onClick={closeModalDetail}
+                    className="px-4 bg-[#ff7729] cursor-pointer text-sm py-2 text-white rounded-xl transition-all duration-200 font-medium"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

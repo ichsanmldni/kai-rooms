@@ -133,9 +133,10 @@ const KaiRoomsApp = () => {
   const [dataNotification, setDataNotification] = useState([]);
   const [isLoadingSubmit, setIsLoadingSubmit] = useState(false);
   const [typePopUpBook, setTypePopUpBook] = useState("room");
+  const [selectedRoom, setSelectedRoom] = useState(undefined);
 
   const timeSlots = [];
-  for (let hour = 8; hour < 17; hour++) {
+  for (let hour = 0; hour < 24; hour++) {
     const startTime = `${hour.toString().padStart(2, "0")}:00`;
     const endTime = `${(hour + 1).toString().padStart(2, "0")}:00`;
     timeSlots.push({
@@ -243,12 +244,13 @@ const KaiRoomsApp = () => {
 
         const startTimeStr = start.toTimeString().slice(0, 5); // "HH:mm"
         const endTimeStr = end.toTimeString().slice(0, 5); // "HH:mm"
-        const duration = (end - start) / (1000 * 60 * 60); // dalam jam
+        const duration = (end - start) / (1000 * 60 * 15); // dalam menit
 
         meetingsByTime[startTimeStr] = {
           id: meeting.id,
           title: meeting.title,
-          endTime: endTimeStr,
+          startTime: startTimeStr, // 🔥 Tambahin ini
+          endTime: endTimeStr, // 🔥 Tambahin ini
           participants: meeting.meetingAttendees?.length || 0,
           status: getMeetingStatus(start, end),
           priority: "medium", // isi sesuai skemamu
@@ -288,15 +290,16 @@ const KaiRoomsApp = () => {
 
       const startTimeStr = start.toTimeString().slice(0, 5); // "HH:mm"
       const endTimeStr = end.toTimeString().slice(0, 5); // "HH:mm"
-      const duration = (end - start) / (1000 * 60 * 60); // jam
+      const duration = (end - start) / (1000 * 60 * 15); // dalam 15 menit sama seperti atas
 
       meetingsByTime[startTimeStr] = {
         id: meeting.id,
         title: meeting.title,
-        endTime: endTimeStr,
+        startTime: startTimeStr, // 🔥 samain kayak atas
+        endTime: endTimeStr, // 🔥 samain kayak atas
         participants: meeting.meetingAttendees?.length || 0,
         status: getMeetingStatus(start, end),
-        priority: "medium", // sesuaikan jika perlu
+        priority: "medium", // isi sesuai skemamu
         organizer: meeting.createdBy?.name || "Unknown",
         description: meeting.description,
         duration,
@@ -393,6 +396,8 @@ const KaiRoomsApp = () => {
     }
   }
 
+  console.log("ini timeslots", splitSlotsByMeetings(selectedMeeting));
+
   useEffect(() => {
     async function loadUser() {
       try {
@@ -456,24 +461,78 @@ const KaiRoomsApp = () => {
       }
     }
 
-    function generateSlots(start = 8, end = 17, interval = 1) {
+    function generateSlots(start = 0, end = 24, interval = 1) {
       const generatedSlots = [];
-
       if (end <= start || interval <= 0) {
         console.error("Parameter waktu tidak valid");
         setAllSlots([]);
         return;
       }
-
       for (let i = start; i < end; i += interval) {
         const startHour = i.toString().padStart(2, "0") + ":00";
         generatedSlots.push(startHour);
       }
-
-      // Tambahkan jam akhir sebagai batas maksimal untuk waktu selesai
       generatedSlots.push(end.toString().padStart(2, "0") + ":00");
-
       setAllSlots(generatedSlots);
+    }
+
+    function splitSlotsByMeetings(baseSlots, room) {
+      if (!room || !room.meetings) return baseSlots;
+
+      let refinedSlots = [];
+
+      for (let i = 0; i < baseSlots.length - 1; i++) {
+        const slotStart = baseSlots[i];
+        const slotEnd = baseSlots[i + 1];
+
+        const [sH, sM] = slotStart.split(":").map(Number);
+        const [eH, eM] = slotEnd.split(":").map(Number);
+
+        const slotStartDate = new Date();
+        slotStartDate.setHours(sH, sM, 0, 0);
+        const slotEndDate = new Date();
+        slotEndDate.setHours(eH, eM, 0, 0);
+
+        // Cari apakah ada meeting di range ini
+        let cuts = [slotStartDate, slotEndDate];
+        for (const meeting of Object.values(room.meetings)) {
+          const [mStartH, mStartM] = meeting.startTime
+            ? meeting.startTime.split(":").map(Number)
+            : [0, 0];
+          const [mEndH, mEndM] = meeting.endTime
+            ? meeting.endTime.split(":").map(Number)
+            : [0, 0];
+
+          const mStart = new Date();
+          mStart.setHours(mStartH, mStartM, 0, 0);
+          const mEnd = new Date();
+          mEnd.setHours(mEndH, mEndM, 0, 0);
+
+          if (mStart < slotEndDate && mEnd > slotStartDate) {
+            cuts.push(mStart, mEnd);
+          }
+        }
+
+        // Sortir & remove duplicate
+        cuts = [...new Set(cuts.map((d) => d.getTime()))].sort((a, b) => a - b);
+
+        for (let j = 0; j < cuts.length - 1; j++) {
+          const subStart = new Date(cuts[j]);
+          const subEnd = new Date(cuts[j + 1]);
+          refinedSlots.push({
+            start: subStart.toTimeString().slice(0, 5),
+            end: subEnd.toTimeString().slice(0, 5),
+            label: `${subStart.toTimeString().slice(0, 5)}-${subEnd
+              .toTimeString()
+              .slice(0, 5)}`,
+            key: subStart.toTimeString().slice(0, 5),
+          });
+        }
+      }
+
+      console.log("refined", refinedSlots);
+
+      return refinedSlots;
     }
 
     async function loadMeetingsAll() {
@@ -566,8 +625,8 @@ const KaiRoomsApp = () => {
         todayList.push(meeting);
 
         // Cari meeting terdekat yang belum dimulai atau sedang berlangsung
-        const diff = Math.abs(startTime.getTime() - today.getTime());
-        if (diff < nearestDiff && startTime >= today) {
+        // Kalau sedang berlangsung → langsung pilih sebagai nearest
+        if (startTime <= today && endTime >= today) {
           nearest = {
             id: m.id,
             title: m.title,
@@ -584,7 +643,29 @@ const KaiRoomsApp = () => {
             ruangan: m.room?.name,
             linkMeet: m.linkMeet || "-",
           };
-          nearestDiff = diff;
+          nearestDiff = 0; // langsung jadi prioritas utama
+        } else if (startTime >= today) {
+          // Meeting yang belum dimulai → ambil yang terdekat setelah sekarang
+          const diff = startTime.getTime() - today.getTime();
+          if (diff < nearestDiff) {
+            nearest = {
+              id: m.id,
+              title: m.title,
+              jenisRapat: m.type ? m.type : "Offline",
+              statusRapat: getStatus(startTime, endTime, today, true),
+              tanggal: today.toLocaleDateString("id-ID", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              }),
+              time,
+              endTime: end,
+              ruangan: m.room?.name,
+              linkMeet: m.linkMeet || "-",
+            };
+            nearestDiff = diff;
+          }
         }
 
         // Tambahkan semua meeting hari ini (kecuali yang sedang berlangsung) ke upcoming
@@ -783,6 +864,7 @@ const KaiRoomsApp = () => {
 
   const handleShowDetail = (meeting) => {
     const fullMeeting = dataMeetingsAll.find((m) => m.id === meeting.id);
+    console.log("ini selected cuy", fullMeeting);
     if (fullMeeting) {
       setSelectedMeeting(fullMeeting);
     } else {
@@ -892,51 +974,51 @@ const KaiRoomsApp = () => {
     return true;
   };
 
-  const getAvailableEndSlots = () => {
-    if (!formDataBookingRoom.waktuMulai || !formDataBookingRoom.tanggal)
-      return [];
+  // const getAvailableEndSlots = () => {
+  //   if (!formDataBookingRoom.waktuMulai || !formDataBookingRoom.tanggal)
+  //     return [];
 
-    const selectedRoom = dataRoomsSelectedTanggal?.[0];
-    const selectedDate = new Date(formDataBookingRoom.tanggal);
-    const startIdx = allSlots.indexOf(formDataBookingRoom.waktuMulai);
+  //   const selectedRoom = dataRoomsSelectedTanggal?.[0];
+  //   const selectedDate = new Date(formDataBookingRoom.tanggal);
+  //   const startIdx = allSlots.indexOf(formDataBookingRoom.waktuMulai);
 
-    const availableSlots = [];
+  //   const availableSlots = [];
 
-    for (let endIdx = startIdx + 1; endIdx < allSlots.length; endIdx++) {
-      const startTimeStr = allSlots[startIdx];
-      const endTimeStr = allSlots[endIdx]; // ✅ ini akses langsung slot selanjutnya
+  //   for (let endIdx = startIdx + 1; endIdx < allSlots.length; endIdx++) {
+  //     const startTimeStr = allSlots[startIdx];
+  //     const endTimeStr = allSlots[endIdx]; // ✅ ini akses langsung slot selanjutnya
 
-      const [startHour, startMinute] = startTimeStr.split(":").map(Number);
-      const [endHour, endMinute] = endTimeStr.split(":").map(Number);
+  //     const [startHour, startMinute] = startTimeStr.split(":").map(Number);
+  //     const [endHour, endMinute] = endTimeStr.split(":").map(Number);
 
-      const bookingStart = new Date(selectedDate);
-      bookingStart.setHours(startHour, startMinute, 0, 0);
+  //     const bookingStart = new Date(selectedDate);
+  //     bookingStart.setHours(startHour, startMinute, 0, 0);
 
-      const bookingEnd = new Date(selectedDate);
-      bookingEnd.setHours(endHour, endMinute, 0, 0);
+  //     const bookingEnd = new Date(selectedDate);
+  //     bookingEnd.setHours(endHour, endMinute, 0, 0);
 
-      const hasConflict = Object.entries(selectedRoom?.meetings || {}).some(
-        ([meetingStartStr, meeting]) => {
-          const [mStartH, mStartM] = meetingStartStr.split(":").map(Number);
-          const [mEndH, mEndM] = meeting.endTime.split(":").map(Number);
+  //     const hasConflict = Object.entries(selectedRoom?.meetings || {}).some(
+  //       ([meetingStartStr, meeting]) => {
+  //         const [mStartH, mStartM] = meetingStartStr.split(":").map(Number);
+  //         const [mEndH, mEndM] = meeting.endTime.split(":").map(Number);
 
-          const meetingStart = new Date(selectedDate);
-          meetingStart.setHours(mStartH, mStartM, 0, 0);
+  //         const meetingStart = new Date(selectedDate);
+  //         meetingStart.setHours(mStartH, mStartM, 0, 0);
 
-          const meetingEnd = new Date(selectedDate);
-          meetingEnd.setHours(mEndH, mEndM, 0, 0);
+  //         const meetingEnd = new Date(selectedDate);
+  //         meetingEnd.setHours(mEndH, mEndM, 0, 0);
 
-          return bookingStart < meetingEnd && bookingEnd > meetingStart;
-        }
-      );
+  //         return bookingStart < meetingEnd && bookingEnd > meetingStart;
+  //       }
+  //     );
 
-      if (hasConflict) break;
+  //     if (hasConflict) break;
 
-      availableSlots.push(endTimeStr);
-    }
+  //     availableSlots.push(endTimeStr);
+  //   }
 
-    return availableSlots;
-  };
+  //   return availableSlots;
+  // };
 
   const handleSlotClick = (room, timeSlot) => {
     console.log(
@@ -952,6 +1034,7 @@ const KaiRoomsApp = () => {
       return;
     }
 
+    setSelectedRoom(room);
     setFormDataBookingRoom((prev) => ({
       ...prev,
       ruangan: room?.id || "",
@@ -1020,7 +1103,8 @@ const KaiRoomsApp = () => {
 
     for (const [startTime, meeting] of Object.entries(room.meetings)) {
       const startHour = parseInt(startTime.split(":")[0]);
-      const endHour = startHour + meeting.duration;
+      const durationInHours = Math.ceil(meeting.duration / 4); // konversi 15 menit -> jam
+      const endHour = startHour + durationInHours;
 
       if (slotHour > startHour && slotHour < endHour) {
         return true;
@@ -1031,8 +1115,12 @@ const KaiRoomsApp = () => {
   };
 
   const getSlotSpan = (meeting) => {
-    return Math.ceil(meeting.duration);
+    if (!meeting?.duration) return 1;
+
+    // Durasi dihitung per 15 menit → 4 slot = 1 jam
+    return Math.ceil(meeting.duration / 4);
   };
+
   const getSlotColor = (status, meeting) => {
     if (status === "available") {
       return "bg-gray-50 hover:bg-green-50 border-gray-200 hover:border-green-300";
@@ -1076,6 +1164,242 @@ const KaiRoomsApp = () => {
   const closeNotificationModal = () => {
     setIsModalNotificationOpen(false);
   };
+
+  const STEP_MIN = 15;
+
+  // HH:MM -> menit total
+  const toMinutes = (hhmm) => {
+    const [h, m] = hhmm.split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  // menit -> HH:MM
+  const fromMinutes = (mins) => {
+    const h = String(Math.floor(mins / 60)).padStart(2, "0");
+    const m = String(mins % 60).padStart(2, "0");
+    return `${h}:${m}`;
+  };
+
+  // generate array slot 24 jam (default step 15 menit)
+  const buildDaySlots = (
+    step = STEP_MIN,
+    { excludeEnd = false, includeMidnight = true } = {}
+  ) => {
+    const out = [];
+    for (let t = 0; t <= 24 * 60 - step; t += step) {
+      out.push(fromMinutes(t));
+    }
+
+    // kalau mau ada 24:00 (alias midnight)
+    if (includeMidnight) {
+      out.push("24:00");
+    }
+
+    if (excludeEnd && out.length) out.pop();
+
+    return out;
+  };
+
+  const hhmmToDate = (dateLike, hhmm) => {
+    const [h, m] = hhmm.split(":").map(Number);
+    const d = new Date(dateLike);
+    d.setHours(h, m, 0, 0);
+    return d;
+  };
+
+  const extractMeetingIntervals = (room, baseDate) => {
+    if (!room?.meetings) return [];
+    const intervals = [];
+    for (const [maybeStartKey, meeting] of Object.entries(room.meetings)) {
+      const startHH = meeting.startTime || maybeStartKey;
+      const endHH = meeting.endTime;
+      if (!startHH || !endHH) continue;
+      const s = hhmmToDate(baseDate, startHH);
+      let e = hhmmToDate(baseDate, endHH);
+      if (e <= s) e.setDate(e.getDate() + 1); // antisipasi nyebrang hari
+      intervals.push({ start: s, end: e });
+    }
+    return intervals.sort((a, b) => a.start - b.start);
+  };
+
+  const isPastHHMM = (selectedDate, hhmm) =>
+    hhmmToDate(selectedDate, hhmm) < new Date();
+  const isInsideAnyMeeting = (dt, intervals) =>
+    intervals.some(({ start, end }) => dt >= start && dt < end);
+
+  const getAvailableStartSlots = ({ selectedDate, jenisRapat, room }) => {
+    const candidates = buildDaySlots(STEP_MIN, { excludeEnd: true });
+    const intervals =
+      jenisRapat === "Online"
+        ? []
+        : extractMeetingIntervals(room, selectedDate);
+
+    return candidates.filter((hhmm) => {
+      const dt = hhmmToDate(selectedDate, hhmm);
+      if (isPastHHMM(selectedDate, hhmm)) return false;
+      if (isInsideAnyMeeting(dt, intervals)) return false;
+      return true;
+    });
+  };
+
+  const getAvailableEndSlots = ({ selectedDate, startHHMM, room }) => {
+    if (!startHHMM || !selectedDate) return [];
+
+    // pakai array yg sama
+    const allSlots = buildDaySlots(STEP_MIN);
+    const startIdx = allSlots.indexOf(startHHMM);
+    if (startIdx === -1) return [];
+
+    const availableSlots = [];
+
+    for (let endIdx = startIdx + 1; endIdx < allSlots.length; endIdx++) {
+      const startTimeStr = allSlots[startIdx];
+      const endTimeStr = allSlots[endIdx];
+
+      const [sH, sM] = startTimeStr.split(":").map(Number);
+      const [eH, eM] = endTimeStr.split(":").map(Number);
+
+      const bookingStart = new Date(selectedDate);
+      bookingStart.setHours(sH, sM, 0, 0);
+
+      const bookingEnd = new Date(selectedDate);
+      bookingEnd.setHours(eH, eM, 0, 0);
+
+      const hasConflict = Object.entries(room?.meetings || {}).some(
+        ([mStartStr, meeting]) => {
+          const [mSH, mSM] = mStartStr.split(":").map(Number);
+          const [mEH, mEM] = meeting.endTime.split(":").map(Number);
+
+          const mStart = new Date(selectedDate);
+          mStart.setHours(mSH, mSM, 0, 0);
+
+          const mEnd = new Date(selectedDate);
+          mEnd.setHours(mEH, mEM, 0, 0);
+
+          // overlap check
+          return bookingStart < mEnd && bookingEnd > mStart;
+        }
+      );
+
+      if (hasConflict) break;
+      availableSlots.push(endTimeStr);
+    }
+
+    return availableSlots;
+  };
+
+  const formatDuration = (duration) => {
+    if (!duration) return "0m";
+
+    const totalMinutes = duration * 15; // karena 1 slot = 15 menit
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+    if (hours > 0) return `${hours}h`;
+    return `${minutes}m`;
+  };
+
+  function splitSlotsByMeetings(timeSlots, room, formDataBookingRoom) {
+    if (!room || !room.meetings) return timeSlots;
+
+    const refinedSlots = [];
+    const seen = new Set();
+
+    const today = new Date();
+
+    // ambil dari formDataBookingRoom.tanggal kalau ada
+    const selectedDate = formDataBookingRoom?.tanggal
+      ? new Date(formDataBookingRoom.tanggal + "T00:00:00")
+      : new Date(today.toDateString()); // fallback: hari ini
+
+    const isToday = today.toDateString() === selectedDate.toDateString();
+    const now = new Date();
+
+    const makeDate = (hhmm, base = selectedDate) => {
+      console.log("ini hahaemem", hhmm);
+      const [h, m] = hhmm.split(":").map(Number);
+      const d = new Date(base);
+      d.setHours(h, m, 0, 0);
+      return d;
+    };
+    console.log(timeSlots);
+
+    for (const { start: slotStart, end: slotEnd } of timeSlots) {
+      console.log(slotStart, slotEnd);
+      let slotStartDate = makeDate(slotStart);
+      let slotEndDate = makeDate(slotEnd);
+
+      if (slotEndDate <= slotStartDate) {
+        slotEndDate = new Date(slotEndDate.getTime() + 24 * 60 * 60000);
+      }
+
+      let cuts = [slotStartDate.getTime(), slotEndDate.getTime()];
+
+      // Potong oleh meeting
+      for (const meeting of Object.values(room.meetings)) {
+        const mStart = makeDate(meeting.startTime || "00:00");
+        let mEnd = makeDate(meeting.endTime || "00:00");
+        if (mEnd <= mStart) mEnd.setDate(mEnd.getDate() + 1);
+
+        if (mStart < slotEndDate && mEnd > slotStartDate) {
+          cuts.push(mStart.getTime(), mEnd.getTime());
+        }
+      }
+
+      // Potong oleh quarter sekarang hanya kalau tanggal = hari ini
+      // Potong oleh quarter sekarang hanya kalau selectedDate = hari ini
+      if (isToday) {
+        const quarterStart = new Date(now);
+        quarterStart.setMinutes(Math.floor(now.getMinutes() / 15) * 15, 0, 0);
+        const quarterEnd = new Date(quarterStart.getTime() + 15 * 60000);
+
+        // Hanya tambahin cut kalau memang ada di dalam slot
+        if (quarterStart >= slotStartDate && quarterStart < slotEndDate) {
+          cuts.push(quarterStart.getTime());
+        }
+        if (quarterEnd > slotStartDate && quarterEnd <= slotEndDate) {
+          cuts.push(quarterEnd.getTime());
+        }
+      }
+
+      cuts = [...new Set(cuts)].sort((a, b) => a - b);
+
+      for (let i = 0; i < cuts.length - 1; i++) {
+        const subStart = new Date(cuts[i]);
+        const subEnd = new Date(cuts[i + 1]);
+
+        const overlappedMeeting = Object.values(room.meetings).find(
+          (meeting) => {
+            const mStart = makeDate(meeting.startTime);
+            const mEnd = makeDate(meeting.endTime);
+            if (mEnd <= mStart) mEnd.setDate(mEnd.getDate() + 1);
+            return mStart < subEnd && mEnd > subStart;
+          }
+        );
+
+        const keyUnique = `${subStart.toTimeString().slice(0, 5)}-${subEnd
+          .toTimeString()
+          .slice(0, 5)}-${overlappedMeeting?.id || "free"}`;
+
+        if (!seen.has(keyUnique)) {
+          seen.add(keyUnique);
+
+          refinedSlots.push({
+            start: subStart.toTimeString().slice(0, 5),
+            end: subEnd.toTimeString().slice(0, 5),
+            label: `${subStart.toTimeString().slice(0, 5)}-${subEnd
+              .toTimeString()
+              .slice(0, 5)}`,
+            key: subStart.toTimeString().slice(0, 5),
+            meetingId: overlappedMeeting?.id || null,
+          });
+        }
+      }
+    }
+
+    return refinedSlots;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
@@ -1810,50 +2134,72 @@ const KaiRoomsApp = () => {
 
                               {/* Ultra Compact Time Slots Grid */}
                               <div className="grid grid-cols-9 gap-1 mt-2">
-                                {timeSlots.map((timeSlot, index) => {
-                                  const meeting = room.meetings[timeSlot.key];
-                                  const isSpanned = isSlotSpanned(
-                                    room,
-                                    timeSlot.key
-                                  );
+                                {splitSlotsByMeetings(timeSlots, room).map(
+                                  (timeSlot, index) => {
+                                    const meeting = room.meetings[timeSlot.key];
+                                    const isSpanned = isSlotSpanned(
+                                      room,
+                                      timeSlot.key
+                                    );
 
-                                  if (isSpanned) return null;
+                                    if (isSpanned) return null;
 
-                                  const status = meeting
-                                    ? getSlotStatus(room, timeSlot.key)
-                                    : "available";
-                                  const colSpan = meeting
-                                    ? getSlotSpan(meeting)
-                                    : 1;
-                                  const now = new Date();
-                                  const selectedDate = new Date(); // atau new Date().toISOString().split("T")[0]
+                                    const status = meeting
+                                      ? getSlotStatus(room, timeSlot.key)
+                                      : "available";
+                                    const colSpan = meeting
+                                      ? getSlotSpan(meeting)
+                                      : 1;
+                                    const now = new Date();
+                                    const selectedDate = new Date(); // atau tanggal yang dipilih user
 
-                                  // Ambil jam dan menit dari timeSlot.key (format "HH:mm")
-                                  const [slotHour, slotMinute] = timeSlot.key
-                                    .split(":")
-                                    .map(Number);
+                                    // Ambil jam dan menit dari timeSlot.key (format "HH:mm")
+                                    const [slotHour, slotMinute] = timeSlot.key
+                                      .split(":")
+                                      .map(Number);
 
-                                  // Gabungkan tanggal hari ini dengan jam slot
-                                  const slotTime = new Date(selectedDate);
-                                  slotTime.setHours(slotHour, slotMinute, 0, 0);
+                                    // Gabungkan tanggal hari ini dengan jam slot
+                                    const slotTime = new Date(selectedDate);
+                                    slotTime.setHours(
+                                      slotHour,
+                                      slotMinute,
+                                      0,
+                                      0
+                                    );
 
-                                  // Cek apakah waktu slot sedang berlangsung sekarang
-                                  const isCurrentTime =
-                                    now.toDateString() ===
-                                      slotTime.toDateString() &&
-                                    now.getHours() === slotTime.getHours();
+                                    const parseHHMM = (hhmm) => {
+                                      const [h, m] = hhmm
+                                        .split(":")
+                                        .map(Number);
+                                      const d = new Date(selectedDate);
+                                      d.setHours(h, m, 0, 0);
+                                      return d;
+                                    };
 
-                                  // Cek apakah waktu slot sudah lewat
-                                  const isPastTime = now > slotTime;
+                                    let slotStart = parseHHMM(timeSlot.start);
+                                    let slotEnd = parseHHMM(timeSlot.end);
+                                    if (slotEnd <= slotStart)
+                                      slotEnd.setDate(slotEnd.getDate() + 1);
 
-                                  return (
-                                    <button
-                                      key={timeSlot.key}
-                                      onClick={() =>
-                                        handleSlotClick(room, timeSlot)
-                                      }
-                                      disabled={isPastTime && !meeting}
-                                      className={`
+                                    const isCurrentTime =
+                                      now >= slotStart && now < slotEnd;
+                                    const isPastTime = now >= slotEnd;
+
+                                    const isDisabled =
+                                      (isPastTime && !meeting) ||
+                                      (isCurrentTime && !meeting);
+
+                                    const isUnavailable =
+                                      isPastTime || isCurrentTime;
+
+                                    return (
+                                      <button
+                                        key={timeSlot.key}
+                                        onClick={() =>
+                                          handleSlotClick(room, timeSlot)
+                                        }
+                                        disabled={isUnavailable && !meeting}
+                                        className={`
     group relative p-1.5 rounded text-xs transition-all cursor-pointer min-h-[50px] border
     ${getSlotColor(status, meeting)}
     ${isCurrentTime ? "ring-1 ring-blue-500" : ""}
@@ -1863,88 +2209,91 @@ const KaiRoomsApp = () => {
         : "hover:shadow-sm"
     }
   `}
-                                      style={
-                                        colSpan > 1
-                                          ? { gridColumn: `span ${colSpan}` }
-                                          : {}
-                                      }
-                                    >
-                                      {/* Tooltip on hover */}
-                                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 border border-white/10 backdrop-blur-md bg-white/10 opacity-0 text-black text-[10px] rounded shadow group-hover:opacity-100 transition-opacity z-10">
-                                        {meeting
-                                          ? isPastTime
-                                            ? "Meeting Telah Lewat"
-                                            : "Lihat Detail Meeting"
-                                          : isPastTime
-                                          ? "Telah Lewat"
-                                          : "Booking Slot Ruangan"}
-                                      </div>
+                                        style={
+                                          colSpan > 1
+                                            ? { gridColumn: `span ${colSpan}` }
+                                            : {}
+                                        }
+                                      >
+                                        {/* Tooltip on hover */}
 
-                                      {/* Current Time Indicator */}
-                                      {isCurrentTime && (
-                                        <div className="absolute -top-0.5 left-1/2 transform -translate-x-1/2">
-                                          <div className="bg-blue-500 text-white text-[6px] px-0.5 py-0.5 rounded-full font-bold">
-                                            Sekarang
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      <div className="text-center">
-                                        <div className="font-mono text-[10px] mb-1 font-semibold">
-                                          {meeting && colSpan > 1
-                                            ? `${timeSlot.start}-${meeting.endTime}`
-                                            : timeSlot.label}
+                                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 border border-white/10 backdrop-blur-md bg-white/10 opacity-0 text-black text-[10px] rounded shadow group-hover:opacity-100 transition-opacity z-10">
+                                          {meeting
+                                            ? isPastTime
+                                              ? "Meeting Telah Lewat"
+                                              : "Lihat Detail Meeting"
+                                            : isUnavailable
+                                            ? "Telah Lewat"
+                                            : "Booking Slot Ruangan"}
                                         </div>
 
-                                        {meeting ? (
-                                          <div className="space-y-0.5">
-                                            <div className="font-medium text-[10px] leading-tight truncate">
-                                              {meeting.title}
+                                        {/* Current Time Indicator */}
+                                        {isCurrentTime && (
+                                          <div className="absolute -top-0.5 left-1/2 transform -translate-x-1/2">
+                                            <div className="bg-blue-500 text-white text-[6px] px-0.5 py-0.5 rounded-full font-bold">
+                                              Sekarang
                                             </div>
-                                            <div className="text-[8px] flex justify-center opacity-75">
-                                              {meeting.participants}
-                                              <Users size={10} />
-                                            </div>
-                                            {colSpan > 1 && (
-                                              <div className="text-[8px] opacity-50">
-                                                {meeting.duration}h
-                                              </div>
-                                            )}
-                                          </div>
-                                        ) : (
-                                          <div className="text-gray-400 text-[10px]">
-                                            {isPastTime
-                                              ? "Telah Lewat"
-                                              : "Tersedia"}
                                           </div>
                                         )}
-                                      </div>
 
-                                      {/* Priority dot */}
-                                      {meeting && meeting.priority && (
-                                        <div
-                                          className={`absolute top-1 right-1 w-1 h-1 rounded-full ${
-                                            meeting.priority === "high"
-                                              ? "bg-red-500"
-                                              : meeting.priority === "medium"
-                                              ? "bg-yellow-500"
-                                              : "bg-green-500"
-                                          }`}
-                                        />
-                                      )}
+                                        <div className="text-center">
+                                          <div className="font-mono text-[10px] mb-1 font-semibold">
+                                            {meeting && colSpan > 1
+                                              ? `${timeSlot.start}-${meeting.endTime}`
+                                              : timeSlot.label}
+                                          </div>
 
-                                      {/* Duration bar */}
-                                      {meeting && colSpan > 1 && (
-                                        <div className="absolute bottom-0.5 left-0.5 right-0.5 h-0.5 bg-black bg-opacity-20 rounded-full">
-                                          <div
-                                            className="h-full bg-white bg-opacity-50 rounded-full"
-                                            style={{ width: "100%" }}
-                                          ></div>
+                                          {meeting ? (
+                                            <div className="space-y-0.5">
+                                              <div className="font-medium text-[10px] leading-tight truncate">
+                                                {meeting.title}
+                                              </div>
+                                              <div className="text-[8px] flex justify-center opacity-75">
+                                                {meeting.participants}
+                                                <Users size={10} />
+                                              </div>
+
+                                              <div className="text-[8px] opacity-50">
+                                                {formatDuration(
+                                                  meeting.duration
+                                                )}
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div className="text-gray-400 text-[10px]">
+                                              {isUnavailable
+                                                ? "Telah Lewat"
+                                                : "Tersedia"}
+                                            </div>
+                                          )}
                                         </div>
-                                      )}
-                                    </button>
-                                  );
-                                })}
+
+                                        {/* Priority dot */}
+                                        {meeting && meeting.priority && (
+                                          <div
+                                            className={`absolute top-1 right-1 w-1 h-1 rounded-full ${
+                                              meeting.priority === "high"
+                                                ? "bg-red-500"
+                                                : meeting.priority === "medium"
+                                                ? "bg-yellow-500"
+                                                : "bg-green-500"
+                                            }`}
+                                          />
+                                        )}
+
+                                        {/* Duration bar */}
+                                        {meeting && colSpan > 1 && (
+                                          <div className="absolute bottom-0.5 left-0.5 right-0.5 h-0.5 bg-black bg-opacity-20 rounded-full">
+                                            <div
+                                              className="h-full bg-white bg-opacity-50 rounded-full"
+                                              style={{ width: "100%" }}
+                                            ></div>
+                                          </div>
+                                        )}
+                                      </button>
+                                    );
+                                  }
+                                )}
                               </div>
                             </div>
                           );
@@ -2269,210 +2618,33 @@ const KaiRoomsApp = () => {
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       Jam Mulai *
                     </label>
-                    {formDataBookingRoom.jenisRapat === "Online" ? (
-                      <select
-                        value={formDataBookingRoom.waktuMulai}
-                        onChange={(e) =>
-                          setFormDataBookingRoom((prev) => ({
-                            ...prev,
-                            waktuMulai: e.target.value,
-                            waktuSelesai: "",
-                          }))
-                        }
-                        disabled={formDataBookingRoom.tanggal === ""}
-                        className={`w-full text-sm border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          formDataBookingRoom.tanggal === ""
-                            ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
-                            : "border-gray-300"
-                        }`}
-                      >
-                        <option value="">Pilih Jam</option>
-
-                        {
-                          // 💡 Simpan hasil filter ke dalam variabel dulu
-                          (() => {
-                            const jenis = formDataBookingRoom.jenisRapat;
-                            const selectedRoom = dataRoomsSelectedTanggal?.[0];
-                            const selectedDate = new Date(
-                              formDataBookingRoom.tanggal
-                            );
-                            const now = new Date();
-
-                            const filteredSlots = allSlots.filter(
-                              (slot, index, arr) => {
-                                if (slot === "17:00") return false;
-
-                                const [slotHour, slotMinute] = slot
-                                  .split(":")
-                                  .map(Number);
-                                const slotDateTime = new Date(selectedDate);
-                                slotDateTime.setHours(
-                                  slotHour,
-                                  slotMinute,
-                                  0,
-                                  0
-                                );
-
-                                const isPastTime = slotDateTime < now;
-
-                                const isLastSlot = index === arr.length - 1;
-                                if (isLastSlot) return false;
-
-                                if (jenis === "Online") {
-                                  const today = new Date();
-                                  const isToday =
-                                    selectedDate.toDateString() ===
-                                    today.toDateString();
-
-                                  if (isToday) {
-                                    // Kalau hari ini, harus jam >= 16 dan belum lewat
-                                    return !isPastTime && slotHour >= 16;
-                                  } else {
-                                    // Kalau bukan hari ini, izinkan semua jam kecuali 17:00
-                                    return true;
-                                  }
-                                }
-
-                                const isConflict = Object.values(
-                                  selectedRoom?.meetings || {}
-                                ).some((meeting) => {
-                                  const startKey = Object.keys(
-                                    selectedRoom.meetings
-                                  ).find(
-                                    (key) =>
-                                      selectedRoom.meetings[key].id ===
-                                      meeting.id
-                                  );
-
-                                  const [startH, startM] = startKey
-                                    .split(":")
-                                    .map(Number);
-                                  const [endH, endM] = meeting.endTime
-                                    .split(":")
-                                    .map(Number);
-
-                                  const startDateTime = new Date(selectedDate);
-                                  startDateTime.setHours(startH, startM, 0, 0);
-
-                                  const endDateTime = new Date(selectedDate);
-                                  endDateTime.setHours(endH, endM, 0, 0);
-
-                                  return (
-                                    slotDateTime >= startDateTime &&
-                                    slotDateTime < endDateTime
-                                  );
-                                });
-
-                                return !isPastTime && !isConflict;
-                              }
-                            );
-
-                            // Render hasil
-                            if (filteredSlots.length > 0) {
-                              return filteredSlots.map((slot) => (
-                                <option key={slot} value={slot}>
-                                  {slot}
-                                </option>
-                              ));
-                            } else if (jenis === "Online") {
-                              return (
-                                <option disabled>
-                                  Meeting online hanya bisa dimulai sebelum jam
-                                  16:00.
-                                </option>
-                              );
-                            } else {
-                              return (
-                                <option disabled>
-                                  Tidak ada slot tersedia untuk tanggal ini.
-                                </option>
-                              );
-                            }
-                          })()
-                        }
-                      </select>
-                    ) : (
-                      <select
-                        value={formDataBookingRoom.waktuMulai}
-                        onChange={(e) =>
-                          setFormDataBookingRoom((prev) => ({
-                            ...prev,
-                            waktuMulai: e.target.value,
-                            waktuSelesai: "",
-                          }))
-                        }
-                        disabled={
-                          formDataBookingRoom.tanggal === "" ||
-                          formDataBookingRoom.ruangan === ""
-                        }
-                        className={`w-full text-sm border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          formDataBookingRoom.tanggal === "" ||
-                          formDataBookingRoom.ruangan === ""
-                            ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
-                            : "border-gray-300"
-                        }`}
-                      >
-                        <option value="">Pilih Jam</option>
-                        {allSlots
-                          .filter((slot, index, arr) => {
-                            const selectedRoom = dataRoomsSelectedTanggal?.[0];
-                            const [slotHour, slotMinute] = slot
-                              .split(":")
-                              .map(Number);
-
-                            // 1️⃣ Cek apakah ada slot setelah ini
-                            const isLastSlot = index === arr.length - 1;
-                            if (isLastSlot) return false; // ❌ Jangan tampilkan slot terakhir sebagai jam mulai
-
-                            // 2️⃣ Waktu slot berdasarkan tanggal yang dipilih
-                            const selectedDate = new Date(
-                              formDataBookingRoom.tanggal
-                            );
-                            const slotDateTime = new Date(selectedDate);
-                            slotDateTime.setHours(slotHour, slotMinute, 0, 0);
-
-                            const now = new Date();
-                            const isPastTime = slotDateTime < now;
-
-                            // 3️⃣ Cek apakah slot bentrok dengan meeting
-                            const isConflict = Object.values(
-                              selectedRoom?.meetings || {}
-                            ).some((meeting) => {
-                              const startKey = Object.keys(
-                                selectedRoom.meetings
-                              ).find(
-                                (key) =>
-                                  selectedRoom.meetings[key].id === meeting.id
-                              );
-
-                              const [startH, startM] = startKey
-                                .split(":")
-                                .map(Number);
-                              const [endH, endM] = meeting.endTime
-                                .split(":")
-                                .map(Number);
-
-                              const startDateTime = new Date(selectedDate);
-                              startDateTime.setHours(startH, startM, 0, 0);
-
-                              const endDateTime = new Date(selectedDate);
-                              endDateTime.setHours(endH, endM, 0, 0);
-
-                              return (
-                                slotDateTime >= startDateTime &&
-                                slotDateTime < endDateTime
-                              );
-                            });
-
-                            return !isPastTime && !isConflict;
-                          })
-                          .map((slot) => (
-                            <option key={slot} value={slot}>
-                              {slot}
-                            </option>
-                          ))}
-                      </select>
-                    )}
+                    <select
+                      value={formDataBookingRoom.waktuMulai}
+                      onChange={(e) =>
+                        setFormDataBookingRoom((prev) => ({
+                          ...prev,
+                          waktuMulai: e.target.value,
+                          waktuSelesai: "",
+                        }))
+                      }
+                      disabled={
+                        formDataBookingRoom.tanggal === "" ||
+                        (formDataBookingRoom.jenisRapat !== "Online" &&
+                          formDataBookingRoom.ruangan === "")
+                      }
+                      className="w-full text-sm border rounded-lg p-2"
+                    >
+                      <option value="">Pilih Jam</option>
+                      {getAvailableStartSlots({
+                        selectedDate: new Date(formDataBookingRoom.tanggal),
+                        jenisRapat: formDataBookingRoom.jenisRapat,
+                        room: dataRoomsSelectedTanggal?.[0],
+                      }).map((slot) => (
+                        <option key={slot} value={slot}>
+                          {slot}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -2516,19 +2688,17 @@ const KaiRoomsApp = () => {
                         }
                         disabled={
                           formDataBookingRoom.waktuMulai === "" ||
-                          formDataBookingRoom.tanggal === "" ||
-                          formDataBookingRoom.ruangan === ""
+                          formDataBookingRoom.tanggal === ""
                         }
-                        className={`w-full text-sm border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          formDataBookingRoom.waktuMulai === "" ||
-                          formDataBookingRoom.tanggal === "" ||
-                          formDataBookingRoom.ruangan === ""
-                            ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
-                            : "border-gray-300"
-                        }`}
+                        className="w-full text-sm border rounded-lg p-2"
                       >
                         <option value="">Pilih Jam</option>
-                        {getAvailableEndSlots().map((slot) => (
+                        {getAvailableEndSlots({
+                          selectedDate: new Date(formDataBookingRoom.tanggal),
+                          startHHMM: formDataBookingRoom.waktuMulai,
+                          jenisRapat: formDataBookingRoom.jenisRapat,
+                          room: dataRoomsSelectedTanggal?.[0],
+                        }).map((slot) => (
                           <option key={slot} value={slot}>
                             {slot}
                           </option>
@@ -2541,130 +2711,147 @@ const KaiRoomsApp = () => {
                 {/* Row 3: Time Slots Visualization */}
                 {formDataBookingRoom.jenisRapat !== "Online" &&
                   formDataBookingRoom.tanggal !== "" && (
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-2">
-                        Status Slot Waktu
-                      </label>
-                      <div className="grid grid-cols-9 gap-1 mt-2">
-                        {timeSlots.map((timeSlot, index) => {
-                          const meeting =
-                            dataRoomsSelectedTanggal?.[0]?.meetings?.[
-                              timeSlot.key
-                            ] || null;
-
-                          const isSpanned = isSlotSpanned(
-                            dataRoomsSelectedTanggal[0],
+                    <div className="grid grid-cols-9 gap-1 mt-2">
+                      {splitSlotsByMeetings(
+                        timeSlots,
+                        dataRoomsSelectedTanggal?.[0]
+                      ).map((timeSlot) => {
+                        const meeting =
+                          dataRoomsSelectedTanggal?.[0]?.meetings?.[
                             timeSlot.key
-                          );
+                          ];
+                        const isSpanned = isSlotSpanned(
+                          dataRoomsSelectedTanggal?.[0],
+                          timeSlot.key
+                        );
 
-                          if (isSpanned) return null;
+                        if (isSpanned) return null;
 
-                          const status = meeting
-                            ? getSlotStatus(
-                                dataRoomsSelectedTanggal[0],
-                                timeSlot.key
-                              )
-                            : "available";
-                          const colSpan = meeting ? getSlotSpan(meeting) : 1;
-                          const selectedDate = new Date(
-                            formDataBookingRoom.tanggal
-                          );
-                          const slotTime = new Date(selectedDate);
-                          const [slotHour, slotMinute] = timeSlot.key
-                            .split(":")
-                            .map(Number);
-                          slotTime.setHours(slotHour, slotMinute, 0, 0);
+                        const status = meeting
+                          ? getSlotStatus(
+                              dataRoomsSelectedTanggal?.[0],
+                              timeSlot.key
+                            )
+                          : "available";
+                        const colSpan = meeting ? getSlotSpan(meeting) : 1;
+                        const now = new Date();
+                        const selectedDate = new Date(
+                          formDataBookingRoom.tanggal + "T00:00:00"
+                        );
 
-                          const now = new Date();
-                          const isCurrentTime =
-                            now.toDateString() === slotTime.toDateString() &&
-                            now.getHours() === slotTime.getHours();
+                        // Ambil jam dan menit dari timeSlot.key (format "HH:mm")
+                        const [slotHour, slotMinute] = timeSlot.key
+                          .split(":")
+                          .map(Number);
 
-                          const isPastTime = now > slotTime;
+                        // Gabungkan tanggal hari ini dengan jam slot
+                        const slotTime = new Date(selectedDate);
+                        slotTime.setHours(slotHour, slotMinute, 0, 0);
 
-                          return (
-                            <button
-                              key={timeSlot.key}
-                              className={`
-                relative p-1.5 rounded text-xs transition-all min-h-[50px] border
-                ${getSlotColor(status, meeting)}
-                ${isCurrentTime ? "ring-1 ring-blue-500" : ""}
-                ${
-                  isPastTime && !meeting
-                    ? "opacity-40 cursor-not-allowed"
-                    : "hover:shadow-sm"
-                }
-              `}
-                              style={
-                                colSpan > 1
-                                  ? { gridColumn: `span ${colSpan}` }
-                                  : {}
-                              }
-                            >
-                              {/* Current Time Indicator */}
-                              {isCurrentTime && (
-                                <div className="absolute -top-0.5 left-1/2 transform -translate-x-1/2">
-                                  <div className="bg-blue-500 text-white text-[6px] px-0.5 py-0.5 rounded-full font-bold">
-                                    Sekarang
-                                  </div>
+                        const parseHHMM = (hhmm) => {
+                          const [h, m] = hhmm.split(":").map(Number);
+                          const d = new Date(selectedDate);
+                          d.setHours(h, m, 0, 0);
+                          return d;
+                        };
+
+                        let slotStart = parseHHMM(timeSlot.start);
+                        let slotEnd = parseHHMM(timeSlot.end);
+                        if (slotEnd <= slotStart)
+                          slotEnd.setDate(slotEnd.getDate() + 1);
+
+                        const isCurrentTime = now >= slotStart && now < slotEnd;
+                        const isPastTime = now >= slotEnd;
+
+                        const isDisabled =
+                          (isPastTime && !meeting) ||
+                          (isCurrentTime && !meeting);
+
+                        const isUnavailable = isPastTime || isCurrentTime;
+
+                        return (
+                          <div
+                            key={timeSlot.key}
+                            disabled={true}
+                            className={`
+    group relative p-1.5 rounded text-xs transition-all min-h-[50px] border
+    bg-gray-50 border-gray-200 ${getSlotColor(status, meeting)}
+    ${isCurrentTime ? "ring-1 ring-blue-500" : ""}
+    ${
+      isPastTime && !meeting
+        ? "opacity-40 cursor-not-allowed"
+        : "hover:shadow-sm"
+    }
+  `}
+                            style={
+                              colSpan > 1
+                                ? { gridColumn: `span ${colSpan}` }
+                                : {}
+                            }
+                          >
+                            {/* Tooltip on hover */}
+
+                            {/* Current Time Indicator */}
+                            {isCurrentTime && (
+                              <div className="absolute -top-0.5 left-1/2 transform -translate-x-1/2">
+                                <div className="bg-blue-500 text-white text-[6px] px-0.5 py-0.5 rounded-full font-bold">
+                                  Sekarang
                                 </div>
-                              )}
+                              </div>
+                            )}
 
-                              <div className="text-center">
-                                <div className="font-mono text-[10px] mb-1 font-semibold">
-                                  {meeting && colSpan > 1
-                                    ? `${timeSlot.start}-${meeting.endTime}`
-                                    : timeSlot.label}
-                                </div>
-
-                                {meeting ? (
-                                  <div className="space-y-0.5">
-                                    <div className="font-medium text-[10px] leading-tight truncate">
-                                      {meeting.title}
-                                    </div>
-                                    <div className="text-[8px] flex justify-center opacity-75">
-                                      {meeting.participants}
-                                      <Users size={10} />
-                                    </div>
-                                    {colSpan > 1 && (
-                                      <div className="text-[8px] opacity-50">
-                                        {meeting.duration}h
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="text-gray-400 text-[10px]">
-                                    {isPastTime ? "Telah Lewat" : "Tersedia"}
-                                  </div>
-                                )}
+                            <div className="text-center">
+                              <div className="font-mono text-[10px] mb-1 font-semibold">
+                                {meeting && colSpan > 1
+                                  ? `${timeSlot.start}-${meeting.endTime}`
+                                  : timeSlot.label}
                               </div>
 
-                              {/* Priority dot - smaller */}
-                              {meeting && meeting.priority && (
-                                <div
-                                  className={`absolute top-1 right-1 w-1 h-1 rounded-full ${
-                                    meeting.priority === "high"
-                                      ? "bg-red-500"
-                                      : meeting.priority === "medium"
-                                      ? "bg-yellow-500"
-                                      : "bg-green-500"
-                                  }`}
-                                />
-                              )}
-
-                              {/* Duration bar - thinner */}
-                              {meeting && colSpan > 1 && (
-                                <div className="absolute bottom-0.5 left-0.5 right-0.5 h-0.5 bg-black bg-opacity-20 rounded-full">
-                                  <div
-                                    className="h-full bg-white bg-opacity-50 rounded-full"
-                                    style={{ width: "100%" }}
-                                  ></div>
+                              {meeting ? (
+                                <div className="space-y-0.5">
+                                  <div className="font-medium text-[10px] leading-tight truncate">
+                                    {meeting.title}
+                                  </div>
+                                  <div className="text-[8px] flex justify-center opacity-75">
+                                    {meeting.participants}
+                                    <Users size={10} />
+                                  </div>
+                                  <div className="text-[8px] opacity-50">
+                                    {formatDuration(meeting.duration)}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-gray-400 text-[10px]">
+                                  {isUnavailable ? "Telah Lewat" : "Tersedia"}
                                 </div>
                               )}
-                            </button>
-                          );
-                        })}
-                      </div>
+                            </div>
+
+                            {/* Priority dot */}
+                            {meeting && meeting.priority && (
+                              <div
+                                className={`absolute top-1 right-1 w-1 h-1 rounded-full ${
+                                  meeting.priority === "high"
+                                    ? "bg-red-500"
+                                    : meeting.priority === "medium"
+                                    ? "bg-yellow-500"
+                                    : "bg-green-500"
+                                }`}
+                              />
+                            )}
+
+                            {/* Duration bar */}
+                            {meeting && colSpan > 1 && (
+                              <div className="absolute bottom-0.5 left-0.5 right-0.5 h-0.5 bg-black bg-opacity-20 rounded-full">
+                                <div
+                                  className="h-full bg-white bg-opacity-50 rounded-full"
+                                  style={{ width: "100%" }}
+                                ></div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -2859,7 +3046,7 @@ const KaiRoomsApp = () => {
             </div>
 
             {/* Footer - Fixed */}
-            <div className="flex-shrink-0 border-t border-gray-100">
+            <div className="flex-shrink-0">
               <div className="flex justify-end space-x-4">
                 <button
                   type="button"
