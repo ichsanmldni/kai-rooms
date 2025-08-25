@@ -6,6 +6,7 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { resetPasswordUser, verifyTokenUser } from "../../../api-client/user";
 import { Eye, EyeOff } from "lucide-react";
+import React from "react";
 
 function ResetPasswordClient() {
   const searchParams = useSearchParams();
@@ -95,24 +96,71 @@ function ResetPasswordClient() {
     }
   };
 
-  return (
-    <div className="flex h-screen font-['Segoe_UI',sans-serif] text-black">
-      {/* Kiri */}
-      <div className="flex-1 bg-gradient-to-b from-[#f7825f] to-[#2539a0] text-white flex flex-col justify-center items-center p-5">
-        <img
-          src="/images/KAI_ROOMS_illustration.png"
-          alt="KAI ROOMS"
-          className="max-w-[80%] h-auto mb-5"
-        />
-        <p className="text-center text-lg leading-relaxed">
-          Kelola dan ikuti rapat online dengan mudah di platform meeting resmi
-          dari KAI.
-        </p>
-      </div>
+ return (
+  <div className="flex h-screen font-['Segoe_UI',sans-serif] text-black">
+    {/* Kiri */}
+    <div className="flex-1 white-300 text-black flex flex-col justify-center items-center p-5 transition-all duration-500">
+      {/* Slideshow */}
+      {(() => {
+        const slides = [
+          { src: "/images/A1.png", text: "" },
+          { src: "/images/A2.png", text: "" },
+          { src: "/images/A3.png", text: "" },
+          { src: "/images/A4.png", text: "" },
+          { src: "/images/A5.png", text: "" },
+          { src: "/images/A6.png", text: "" },
+          { src: "/images/A7.png", text: "" },
+        ];
+
+        const [currentIndex, setCurrentIndex] = React.useState(0);
+
+        React.useEffect(() => {
+          const interval = setInterval(() => {
+            setCurrentIndex((prev) => (prev + 1) % slides.length);
+          }, 3000);
+          return () => clearInterval(interval);
+        }, []);
+
+        return (
+          <>
+            <img
+              src={slides[currentIndex].src}
+              alt={`A${currentIndex + 1}`}
+              className="max-w-[80%] h-auto mb-5 transition-opacity duration-500"
+            />
+            {slides[currentIndex].text && (
+              <h3 className="whitespace-pre-line text-center text-lg leading-relaxed px-4">
+                {slides[currentIndex].text}
+              </h3>
+            )}
+          </>
+        );
+      })()}
+    </div>
 
       {/* Kanan */}
-      <div className="flex-1 p-[60px_80px] bg-white flex flex-col justify-center items-start">
-        <h2 className="text-2xl font-bold mb-2 text-left">Reset Password</h2>
+      <div className="flex-1 p-[60px_80px] bg-gray-100 flex flex-col justify-center items-start">
+        <div className="bg-white w-full p-6 rounded-md shadow-md">
+        <div className="flex justify-between items-center mb-1 w-full">
+  <div className="flex items-center gap-2">
+    <img
+      src="/images/a8.svg"
+      alt="A8"
+      className="max-w-[50px] object-contain"
+    />
+    <h4 className="text-2xl font-bold text-left">
+      Buat Akun Baru
+    </h4>
+  </div>
+<div className="flex items-center gap-2">
+    <img
+      src="/images/KAI Danantara Logo.png"
+      alt="KAI Danantara Logo"
+      className="max-w-[250px] object-contain"
+    />
+  </div>
+</div>
+
         <p className="text-sm text-gray-600 mb-8 text-left">
           {message
             ? message
@@ -120,13 +168,14 @@ function ResetPasswordClient() {
             ? "Masukkan password baru Anda di bawah."
             : "Memvalidasi token..."}
         </p>
+        
 
         {isValid && (
           <form onSubmit={handleResetPassword} className="w-full">
             <div className="relative mb-4">
               <input
                 type={showNewPassword ? "text" : "password"} // Ubah tipe input berdasarkan state
-                className="w-full p-3 text-black rounded-md border border-gray-300 text-sm focus:outline-none focus:border-[#7f5fff] pr-10" // Tambahkan padding kanan untuk ikon
+                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff] pr-10" // Tambahkan padding kanan untuk ikon
                 placeholder="Masukkan Password Baru"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -154,7 +203,7 @@ function ResetPasswordClient() {
             <div className="relative mb-4">
               <input
                 type={showConfirmPassword ? "text" : "password"} // Ubah tipe input
-                className="w-full p-3 text-black rounded-md border border-gray-300 text-sm focus:outline-none focus:border-[#7f5fff] pr-10"
+                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff] pr-10"
                 placeholder="Konfirmasi Password Baru"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -194,6 +243,7 @@ function ResetPasswordClient() {
         )}
         <ToastContainer />
       </div>
+    </div>
     </div>
   );
 }

@@ -3,7 +3,15 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Calendar, Clock, Settings, LogOut, Bell, User } from "lucide-react";
+import {
+  Calendar,
+  Clock,
+  Settings,
+  LogOut,
+  Bell,
+  User,
+  HelpCircle,
+} from "lucide-react";
 import { ToastContainer } from "react-toastify";
 import { jwtDecode } from "jwt-decode";
 import { fetchUserById, updateUser } from "../../api-client/user";
@@ -30,12 +38,14 @@ const Pengaturan = () => {
     nama: "",
     email: "",
     noTelp: "",
+    nipp: "",
   });
   const [userDataLogin, setUserDataLogin] = useState({
     id: "",
     nama: "",
     email: "",
     noTelp: "",
+    nipp: "",
   });
 
   console.log("ini userdata", userData);
@@ -96,6 +106,7 @@ const Pengaturan = () => {
             nama: data.name || "",
             email: data.email || "",
             noTelp: data.noTelp || "",
+            nipp: data.nipp || "",
           });
         } catch (error) {
           console.error("Error loading user:", error);
@@ -104,6 +115,7 @@ const Pengaturan = () => {
             nama: "",
             email: "",
             noTelp: "",
+            nipp: data.nipp || "",
           });
         }
       }
@@ -138,6 +150,7 @@ const Pengaturan = () => {
           nama: data.nama || "",
           email: data.email || "",
           noTelp: data.noTelp || "",
+          nipp: data.nipp || "",
         });
       } catch (error) {
         console.error("Error loading user:", error);
@@ -146,6 +159,7 @@ const Pengaturan = () => {
           nama: "",
           email: "",
           noTelp: "",
+          nipp: data.nipp || "",
         });
       }
     }
@@ -283,28 +297,39 @@ const Pengaturan = () => {
                 { key: "nama", label: "Nama Lengkap", type: "text" },
                 { key: "email", label: "Email", type: "email" },
                 { key: "noTelp", label: "No. Telepon", type: "tel" },
-              ].map(({ key, label, type }) => (
-                <div key={key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {label}
-                  </label>
-                  <input
-                    type={type}
-                    value={userData[key] || ""} // Add fallback empty string
-                    onChange={(e) =>
-                      handleUbahInput("profil", key, e.target.value)
-                    }
-                    className="w-full text-black px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#1b68b0] focus:border-[#1b68b0] transition-colors"
-                    placeholder={`Masukkan ${label.toLowerCase()}`}
-                  />
-                </div>
-              ))}
+                { key: "nipp", label: "NIPP", type: "text" },
+              ].map(({ key, label, type }) => {
+                const isNipp = key === "nipp";
+                return (
+                  <div key={key}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {label}
+                    </label>
+                    <input
+                      type={type}
+                      value={userData[key] || ""}
+                      onChange={
+                        (e) =>
+                          !isNipp &&
+                          handleUbahInput("profil", key, e.target.value) // cegah perubahan kalau NIPP
+                      }
+                      disabled={isNipp}
+                      className={`w-full text-black px-3 py-2 text-sm border rounded-md transition-colors ${
+                        isNipp
+                          ? "bg-gray-100 border-gray-300 cursor-not-allowed text-gray-500"
+                          : "border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#1b68b0] focus:border-[#1b68b0]"
+                      }`}
+                      placeholder={`Masukkan ${label.toLowerCase()}`}
+                    />
+                  </div>
+                );
+              })}
             </div>
           </div>
         ),
       },
-      notifikasi: {
-        title: "Pengaturan Notifikasi",
+      pengaturan: {
+        title: "Pengaturan",
         content: (
           <div className="space-y-2">
             {[
@@ -342,7 +367,7 @@ const Pengaturan = () => {
     if (!selected) return null;
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <div className="flex items-center space-x-2 pb-4 border-b">
           <h2 className="text-xl font-semibold text-gray-900">
             {selected.title}
@@ -355,7 +380,7 @@ const Pengaturan = () => {
 
   const tabLabels = {
     profil: "Profil",
-    notifikasi: "Notifikasi",
+    pengaturan: "Pengaturan",
   };
 
   const formatDate = (date) => {
@@ -429,6 +454,11 @@ const Pengaturan = () => {
                 href: "/pengaturan",
                 active: true,
               },
+              {
+                icon: HelpCircle,
+                label: "Bantuan",
+                href: "/bantuan",
+              },
             ].map((item, index) => (
               <li key={index}>
                 <Link
@@ -466,7 +496,7 @@ const Pengaturan = () => {
       </aside>
 
       <main className="ml-60 relative z-10">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-6x2 mx-auto">
           {/* Header */}
           <header className="bg-[#f0f0f2] backdrop-blur-xl border-b border-[#d6eaff] px-6 py-3 shadow-sm">
             <div className="flex justify-between items-center">

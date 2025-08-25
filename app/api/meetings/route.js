@@ -9,11 +9,17 @@ export async function GET(req) {
     const roomIdParam = searchParams.get("room_id");
     const userIdParam = searchParams.get("user_id");
 
+    console.log("GET /meetings dipanggil dengan params:", {
+      roomIdParam,
+      userIdParam,
+    });
+
     let meetings;
 
     if (roomIdParam) {
       const room_id = roomIdParam;
       if (!room_id) {
+        console.log("ID Ruangan tidak valid");
         return new Response(
           JSON.stringify({ message: "ID Ruangan tidak valid!" }),
           {
@@ -33,9 +39,13 @@ export async function GET(req) {
           startTime: "asc",
         },
       });
+      console.log(
+        `Ditemukan ${meetings.length} rapat untuk roomId: ${room_id}`
+      );
     } else if (userIdParam) {
       const user_id = userIdParam;
       if (!user_id) {
+        console.log("ID User tidak valid");
         return new Response(
           JSON.stringify({ message: "ID User tidak valid!" }),
           {
@@ -48,7 +58,7 @@ export async function GET(req) {
         where: { userId: user_id },
       });
 
-      console.log("ini employee", employee);
+      console.log("Ditemukan employee:", employee);
       meetings = await prisma.meeting.findMany({
         include: {
           room: true,
@@ -62,9 +72,13 @@ export async function GET(req) {
 
       const meetingsByEmployee = meetings.filter((meeting) =>
         meeting.meetingAttendees.some(
-          (attendee) => attendee.employeeId === employee.id
+          (attendee) => attendee.employeeId === employee?.id
         )
       );
+      console.log(
+        `Ditemukan ${meetingsByEmployee.length} rapat untuk userId: ${user_id}`
+      );
+
       return new Response(JSON.stringify(meetingsByEmployee), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -80,6 +94,7 @@ export async function GET(req) {
           startTime: "asc",
         },
       });
+      console.log(`Ditemukan total ${meetings.length} rapat tanpa filter`);
     }
 
     return new Response(JSON.stringify(meetings), {
@@ -87,7 +102,7 @@ export async function GET(req) {
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    // Handling errors
+    console.error("Error di GET /meetings:", error);
     return new Response(
       JSON.stringify({
         message: "Terjadi Kesalahan!",
@@ -101,23 +116,24 @@ export async function GET(req) {
 export async function POST(req) {
   try {
     const body = await req.json();
+    console.log("POST /meetings, body:", body);
+
     const {
       catatan,
+      deskripsi,
       jenisRapat,
       kirimUndanganEmail,
       linkMeet,
-      lokasi,
       namaRapat,
       penyelenggara,
-      pesertaRapat, // array of employeeId
+      pesertaRapat,
       ruangan,
       tanggal,
       waktuMulai,
       waktuSelesai,
+      mulaiSekarang,
       createdById,
     } = body;
-
-    console.log("ini body", body);
 
     // Validasi input
     if (
@@ -126,17 +142,19 @@ export async function POST(req) {
       !penyelenggara ||
       !tanggal ||
       !waktuMulai ||
-      !waktuSelesai ||
+      (!mulaiSekarang && !waktuSelesai) ||
       !createdById
     ) {
+      console.log("Validasi gagal: isi semua kolom belum lengkap");
       return new Response(JSON.stringify({ message: "Isi semua kolom!" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    // 🔽 Validasi tambahan tergantung jenis rapat
+    // Validasi tambahan tergantung jenis rapat
     if (jenisRapat === "Online" && !linkMeet) {
+      console.log("Validasi gagal: link meeting wajib untuk rapat online");
       return new Response(
         JSON.stringify({
           message: "Link meeting wajib diisi untuk rapat online!",
@@ -149,6 +167,9 @@ export async function POST(req) {
     }
 
     if (jenisRapat === "Hybrid" && (!ruangan || !linkMeet)) {
+      console.log(
+        "Validasi gagal: ruangan dan link meeting wajib untuk rapat hybrid"
+      );
       return new Response(
         JSON.stringify({
           message: "Ruangan dan link meeting wajib diisi untuk rapat hybrid!",
@@ -161,6 +182,7 @@ export async function POST(req) {
     }
 
     if (jenisRapat === "Offline" && !ruangan) {
+      console.log("Validasi gagal: ruangan wajib untuk rapat offline");
       return new Response(
         JSON.stringify({ message: "Ruangan wajib diisi untuk rapat offline!" }),
         {
@@ -170,7 +192,6 @@ export async function POST(req) {
       );
     }
 
-    // Ambil data employee beserta user-nya
     const employees = await prisma.employee.findMany({
       where: {
         id: {
@@ -187,8 +208,10 @@ export async function POST(req) {
     });
 
     if (employees.length !== pesertaRapat.length) {
+      console.log("Peserta rapat ada yang tidak ditemukan di tabel Employee");
       throw new Error("Beberapa peserta tidak ditemukan di tabel Employee.");
     }
+    console.log(`Ditemukan ${employees.length} peserta rapat`);
 
     const attendeesData = employees.map((emp) => ({
       employee: {
@@ -196,19 +219,25 @@ export async function POST(req) {
       },
     }));
 
-    const startTime = new Date(`${tanggal}T${waktuMulai}:00`);
-    const endTime = new Date(`${tanggal}T${waktuSelesai}:00`);
+    const startTime = mulaiSekarang
+      ? new Date() // langsung sekarang
+      : new Date(`${tanggal}T${waktuMulai}:00`);
 
-    // Simpan data rapat
+    const endTime =
+      !mulaiSekarang && waktuSelesai
+        ? new Date(`${tanggal}T${waktuSelesai}:00`)
+        : null;
+
     const meeting = await prisma.meeting.create({
       data: {
         title: namaRapat,
-        description: catatan,
+        description: deskripsi,
+        notes: catatan,
         startTime,
         endTime,
         type: jenisRapat,
         roomId: jenisRapat === "Online" ? null : ruangan,
-        linkMeet: jenisRapat !== "Offline" ? linkMeet : null, // 🟢 hanya untuk Online & Hybrid
+        linkMeet: jenisRapat !== "Offline" ? linkMeet : null,
         createdById,
         organizerUnitId: penyelenggara,
         meetingAttendees: {
@@ -233,28 +262,34 @@ export async function POST(req) {
       },
     });
 
-    // Kirim notifikasi & email ke semua peserta
-    await Promise.all(
-      meeting.meetingAttendees.map(async (attendee) => {
-        const user = attendee.employee?.user;
-        if (!user) return;
+    console.log("Meeting berhasil dibuat dengan ID:", meeting.id);
 
-        // 1. Notifikasi dalam sistem
-        if (user.settings?.meetingReminder) {
-          await createNotification({
-            userId: user.id,
-            title: "Meeting Baru",
-            message: `Kamu diundang ke meeting "${meeting.title}"`,
-            meetingId: meeting.id,
-          });
-        }
+    // Kirim notifikasi & email
+    const attendees = meeting.meetingAttendees;
+    const batchSize = 5;
 
-        // 2. Email undangan (jika diaktifkan dan flag kirimUndanganEmail = true)
-        if (kirimUndanganEmail && user.settings?.emailNotification) {
-          await sendEmail({
-            to: user.email,
-            subject: `Undangan Meeting: ${meeting.title}`,
-            html: `
+    for (let i = 0; i < attendees.length; i += batchSize) {
+      const batch = attendees.slice(i, i + batchSize);
+
+      await Promise.all(
+        batch.map(async (attendee) => {
+          const user = attendee.employee?.user;
+          if (!user) return;
+
+          if (user.settings?.meetingReminder) {
+            await createNotification({
+              userId: user.id,
+              title: "Meeting Baru",
+              message: `Kamu diundang ke meeting "${meeting.title}"`,
+              meetingId: meeting.id,
+            });
+          }
+
+          if (kirimUndanganEmail && user.settings?.emailNotification) {
+            await sendEmail({
+              to: user.email,
+              subject: `Undangan Meeting: ${meeting.title}`,
+              html: `
     <!DOCTYPE html>
     <html lang="id">
     <head>
@@ -461,7 +496,7 @@ export async function POST(req) {
           </div>
           
           ${
-            meeting.room || lokasi
+            meeting.room
               ? `
           <div class="room-info">
             <div class="room-title">📍 Informasi Ruangan</div>
@@ -476,7 +511,7 @@ export async function POST(req) {
                   ? `<strong>Kapasitas:</strong> ${meeting.room.capacity} orang<br>`
                   : ""
               }
-              ${lokasi ? `<strong>Lokasi:</strong> ${lokasi}<br>` : ""}
+              
               ${
                 meeting.room?.facilities
                   ? `<strong>Fasilitas:</strong> ${meeting.room.facilities}<br>`
@@ -531,10 +566,13 @@ export async function POST(req) {
     </body>
     </html>
     `,
-          });
-        }
-      })
-    );
+            });
+          }
+        })
+      );
+      // Delay opsional antar batch biar lebih aman dari limit (misal 1 detik)
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
 
     return new Response(
       JSON.stringify({ message: "Rapat berhasil dibuat!", meeting }),
@@ -544,7 +582,7 @@ export async function POST(req) {
       }
     );
   } catch (error) {
-    console.error("Error:", error);
+    console.error("Error di POST /meetings:", error);
     return new Response(
       JSON.stringify({
         message: "Terjadi kesalahan!",
@@ -561,30 +599,36 @@ export async function POST(req) {
 export async function PATCH(req) {
   try {
     const body = await req.json();
+    console.log("PATCH /meetings body:", body);
+
     const {
       id,
-      kode,
-      nama,
-      jumlah,
+      catatan,
       deskripsi,
-      keterangan,
-      ruanganId,
-      kategoriId,
+      jenisRapat,
+      kirimUndanganEmail,
+      linkMeet,
+      namaRapat,
+      penyelenggara,
+      pesertaRapat,
+      ruangan,
+      tanggal,
+      waktuMulai,
+      waktuSelesai,
+      createdById,
     } = body;
 
-    // Validate required fields
     if (!id || !kode || !nama || !jumlah || !ruanganId || !kategoriId) {
+      console.log("Validasi gagal pada PATCH: data tidak valid");
       return new Response(JSON.stringify({ message: "Data tidak valid!" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    const existingRecord = await prisma.asset.findUnique({
-      where: { id },
-    });
-
+    const existingRecord = await prisma.asset.findUnique({ where: { id } });
     if (!existingRecord) {
+      console.log("Data asset tidak ditemukan pada PATCH:", id);
       return new Response(
         JSON.stringify({ message: "Data tidak ditemukan!" }),
         {
@@ -595,12 +639,10 @@ export async function PATCH(req) {
     }
 
     const existingKodeRecord = await prisma.asset.findUnique({
-      where: {
-        kode,
-      },
+      where: { kode },
     });
-
     if (existingKodeRecord && existingKodeRecord.id !== id) {
+      console.log("Kode sudah ada pada PATCH:", kode);
       return new Response(
         JSON.stringify({ message: "Kode tersebut sudah ada!" }),
         {
@@ -614,24 +656,27 @@ export async function PATCH(req) {
       where: { id },
       data: {
         kode,
-        nama,
+        title: nama,
         jumlah,
         deskripsi,
+        notes: catatan,
         keterangan,
         ruanganId,
         kategoriId,
       },
     });
 
+    console.log("Data Meeting berhasil diubah pada PATCH:", asset.id);
+
     return new Response(
-      JSON.stringify({ message: "Data Asset berhasil diubah!", asset }),
+      JSON.stringify({ message: "Data Meeting berhasil diubah!", asset }),
       {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }
     );
   } catch (error) {
-    console.log(error);
+    console.error("Error di PATCH /meetings:", error);
     return new Response(
       JSON.stringify({
         message: "Terjadi Kesalahan!",
@@ -647,18 +692,20 @@ export async function DELETE(req) {
     const body = await req.json();
     const { id } = body;
 
+    console.log("DELETE /meetings dipanggil dengan id:", id);
+
     if (!id) {
+      console.log("ID tidak valid pada DELETE");
       return new Response(JSON.stringify({ message: "ID tidak valid!" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    const existingRecord = await prisma.asset.findUnique({
-      where: { id },
-    });
+    const existingRecord = await prisma.meeting.findUnique({ where: { id } });
 
     if (!existingRecord) {
+      console.log("Data meeting tidak ditemukan pada DELETE:", id);
       return new Response(
         JSON.stringify({ message: "Data tidak ditemukan!" }),
         {
@@ -668,35 +715,18 @@ export async function DELETE(req) {
       );
     }
 
-    const deletedOrder = existingRecord.order;
+    console.log("Data meeting ditemukan, akan dihapus:", existingRecord);
 
-    // Jalankan transaksi:
-    await prisma.$transaction([
-      // Hapus data
-      prisma.asset.delete({
-        where: { id },
-      }),
-      // Kurangi 1 order semua gedung yang order-nya di atas item yang dihapus
-      prisma.asset.updateMany({
-        where: {
-          ruanganId: existingRecord.ruanganId,
-          order: {
-            gt: deletedOrder, // order lebih besar dari yang dihapus
-          },
-        },
-        data: {
-          order: {
-            decrement: 1,
-          },
-        },
-      }),
-    ]);
+    await prisma.meeting.delete({ where: { id } });
+
+    console.log("Data meeting berhasil dihapus");
 
     return new Response(
-      JSON.stringify({ message: "Data Asset berhasil dihapus!" }),
+      JSON.stringify({ message: "Data Meeting berhasil dihapus!" }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
   } catch (error) {
+    console.error("Error di DELETE /meetings:", error);
     return new Response(
       JSON.stringify({
         message: "Terjadi Kesalahan!",

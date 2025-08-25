@@ -49,6 +49,7 @@ import {
   CloudCog,
   Building2,
   LinkIcon,
+  HelpCircle,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -981,6 +982,11 @@ const KaiRoomsApp = () => {
                 icon: Settings,
                 label: "Pengaturan & Profil",
                 href: "/pengaturan",
+              },
+              {
+                icon: HelpCircle,
+                label: "Bantuan",
+                href: "/bantuan",
               },
             ].map((item, index) => (
               <li key={index}>
