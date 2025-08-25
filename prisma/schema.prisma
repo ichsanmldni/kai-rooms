@@ -10,6 +10,7 @@ datasource db {
 model User {
   id            String         @id @default(uuid())
   email         String         @unique
+  nipp          String         @unique
   password      String
   name          String
   noTelp        String
@@ -64,14 +65,15 @@ model Room {
 
 model Meeting {
   id           String     @id @default(uuid())
-  title        String
-  description  String?
-  startTime    DateTime
-  endTime      DateTime
+  title        String     @db.VarChar(255)
+  description  String?    @db.Text
+  notes        String?     @db.Text
+  startTime    DateTime?
+  endTime      DateTime?
   type         String?
   room         Room?       @relation(fields: [roomId], references: [id], onDelete: Restrict)
   roomId       String?
-  linkMeet     String?
+  linkMeet     String?    @db.VarChar(255)
   attendees    User[]     @relation("UserMeetings")
   participants Employee[] @relation("EmployeeMeetings")
   createdBy    User       @relation("MeetingsCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
@@ -90,8 +92,9 @@ model Meeting {
 
 model Employee {
   id     String  @id @default(uuid())
-  name   String
   email  String  @unique
+  nipp   String  @unique
+  name   String
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
   userId String? @unique
   unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
@@ -108,8 +111,8 @@ model Notification {
   id        String   @id @default(uuid())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
-  title     String
-  message   String
+  title     String    @db.Text
+  message   String    @db.Text
      meeting   Meeting? @relation("MeetingNotifications", fields: [meetingId], references: [id], onDelete: Cascade)
   meetingId String?
   isRead    Boolean  @default(false)

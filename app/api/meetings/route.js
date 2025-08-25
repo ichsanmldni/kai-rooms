@@ -120,17 +120,18 @@ export async function POST(req) {
 
     const {
       catatan,
+      deskripsi,
       jenisRapat,
       kirimUndanganEmail,
       linkMeet,
-      lokasi,
       namaRapat,
       penyelenggara,
-      pesertaRapat, // array of employeeId
+      pesertaRapat,
       ruangan,
       tanggal,
       waktuMulai,
       waktuSelesai,
+      mulaiSekarang,
       createdById,
     } = body;
 
@@ -141,7 +142,7 @@ export async function POST(req) {
       !penyelenggara ||
       !tanggal ||
       !waktuMulai ||
-      !waktuSelesai ||
+      (!mulaiSekarang && !waktuSelesai) ||
       !createdById
     ) {
       console.log("Validasi gagal: isi semua kolom belum lengkap");
@@ -218,13 +219,20 @@ export async function POST(req) {
       },
     }));
 
-    const startTime = new Date(`${tanggal}T${waktuMulai}:00`);
-    const endTime = new Date(`${tanggal}T${waktuSelesai}:00`);
+    const startTime = mulaiSekarang
+      ? new Date() // langsung sekarang
+      : new Date(`${tanggal}T${waktuMulai}:00`);
+
+    const endTime =
+      !mulaiSekarang && waktuSelesai
+        ? new Date(`${tanggal}T${waktuSelesai}:00`)
+        : null;
 
     const meeting = await prisma.meeting.create({
       data: {
         title: namaRapat,
-        description: catatan,
+        description: deskripsi,
+        notes: catatan,
         startTime,
         endTime,
         type: jenisRapat,
@@ -488,7 +496,7 @@ export async function POST(req) {
           </div>
           
           ${
-            meeting.room || lokasi
+            meeting.room
               ? `
           <div class="room-info">
             <div class="room-title">📍 Informasi Ruangan</div>
@@ -503,7 +511,7 @@ export async function POST(req) {
                   ? `<strong>Kapasitas:</strong> ${meeting.room.capacity} orang<br>`
                   : ""
               }
-              ${lokasi ? `<strong>Lokasi:</strong> ${lokasi}<br>` : ""}
+              
               ${
                 meeting.room?.facilities
                   ? `<strong>Fasilitas:</strong> ${meeting.room.facilities}<br>`
@@ -595,13 +603,19 @@ export async function PATCH(req) {
 
     const {
       id,
-      kode,
-      nama,
-      jumlah,
+      catatan,
       deskripsi,
-      keterangan,
-      ruanganId,
-      kategoriId,
+      jenisRapat,
+      kirimUndanganEmail,
+      linkMeet,
+      namaRapat,
+      penyelenggara,
+      pesertaRapat,
+      ruangan,
+      tanggal,
+      waktuMulai,
+      waktuSelesai,
+      createdById,
     } = body;
 
     if (!id || !kode || !nama || !jumlah || !ruanganId || !kategoriId) {
@@ -642,19 +656,20 @@ export async function PATCH(req) {
       where: { id },
       data: {
         kode,
-        nama,
+        title: nama,
         jumlah,
         deskripsi,
+        notes: catatan,
         keterangan,
         ruanganId,
         kategoriId,
       },
     });
 
-    console.log("Data asset berhasil diubah pada PATCH:", asset.id);
+    console.log("Data Meeting berhasil diubah pada PATCH:", asset.id);
 
     return new Response(
-      JSON.stringify({ message: "Data Asset berhasil diubah!", asset }),
+      JSON.stringify({ message: "Data Meeting berhasil diubah!", asset }),
       {
         status: 200,
         headers: { "Content-Type": "application/json" },

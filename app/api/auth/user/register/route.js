@@ -6,11 +6,12 @@ import { sendEmail } from "../../../../../lib/sendEmail"; // pastikan path sesua
 export async function POST(req) {
   try {
     const body = await req.json();
-    const { email, password, name, noTelp, unitId } = body;
+    const { email, password, name, noTelp, unitId, nipp } = body;
 
     // Cek apakah user sudah terdaftar
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
+    const existingEmailUser = await prisma.user.findUnique({ where: { email } });
+    const existingNippUser = await prisma.user.findUnique({ where: { nipp } });
+    if (existingEmailUser) {
       return NextResponse.json(
         { message: "Email sudah terdaftar, silakan gunakan email lain." },
         { status: 400 }

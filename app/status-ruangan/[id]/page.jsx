@@ -20,6 +20,8 @@ import {
   Activity,
   X,
   FileText,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { fetchRoomById, fetchRoomList } from "../../../api-client/room";
@@ -54,6 +56,7 @@ export default function StatusRuanganDetail() {
   const [dataMeetingsAll, setDataMeetingsAll] = useState([]);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
   const [showDetailPopup, setShowDetailPopup] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
 
   useEffect(() => {
     async function loadMeetingsAll() {
@@ -795,7 +798,7 @@ export default function StatusRuanganDetail() {
       (nextMeeting && getTimeUntilNextInMinutes(nextMeeting) <= 10) ? (
         <div className="bg-gradient-to-br h-full from-slate-50 via-white to-blue-50 flex items-center justify-center p-4">
           {currentMeeting && (
-            <div className="w-full max-w-4xl">
+            <div className="w-full max-w-6xl">
               <div className="text-center mb-8 animate-fade-in">
                 <div className="inline-flex items-center space-x-2 bg-red-500/10 px-4 py-2 rounded-xl mb-4">
                   <div className="relative">
@@ -823,9 +826,9 @@ export default function StatusRuanganDetail() {
                   </div>
 
                   <div className="relative z-10">
-                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
                       {/* Meeting Details */}
-                      <div className="xl:col-span-2 space-y-6">
+                      <div className="xl:col-span-1 space-y-6">
                         <div className="flex items-start space-x-4">
                           <div className="min-w-0 flex-1">
                             <div className="text-white/70 text-sm font-medium mb-2">
@@ -921,6 +924,51 @@ export default function StatusRuanganDetail() {
                               </div>
                             </div>
                           )}
+                        {currentMeeting.notes && (
+                          <div className="xl:col-span-1">
+                            <div className="bg-white/15 backdrop-blur-xl rounded-2xl border border-white/20 shadow-lg overflow-hidden">
+                              {/* Notes Header */}
+                              <div className="p-4 border-b border-white/20">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-2">
+                                    <FileText className="w-5 h-5 text-white/80" />
+                                    <span className="text-white/80 text-sm font-medium">
+                                      Catatan Meeting
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={() => setShowNotes(!showNotes)}
+                                    className="text-white/60 hover:text-white transition-colors"
+                                  >
+                                    {showNotes ? (
+                                      <ChevronUp className="w-4 h-4" />
+                                    ) : (
+                                      <ChevronDown className="w-4 h-4" />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Notes Content */}
+                              <div
+                                className={`transition-all duration-300 overflow-hidden ${
+                                  showNotes ? "max-h-96" : "max-h-20"
+                                }`}
+                              >
+                                <div className="p-4">
+                                  <div className="text-white/90 text-sm leading-relaxed whitespace-pre-line overflow-y-auto max-h-80 custom-scrollbar">
+                                    {currentMeeting.notes}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Show More Indicator */}
+                              {!showNotes && (
+                                <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-red-500/20 to-transparent pointer-events-none"></div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
