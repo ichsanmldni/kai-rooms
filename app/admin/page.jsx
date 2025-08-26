@@ -72,6 +72,11 @@ export default function AdminDashboard() {
   const [filterDate, setFilterDate] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
+  const [filterUnit, setFilterUnit] = useState(""); // <-- ini yang baru
+  const [filteredEmployees, setFilteredEmployees] = useState([]);
+
+  console.log(unitList, "ini unit list");
+  // Ambil unique unit dari data employees
 
   const tabs = [
     { id: "employee", label: "Employee", icon: Users, color: "blue" },
@@ -123,6 +128,12 @@ export default function AdminDashboard() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (employeeList && employeeList.length > 0) {
+      setFilteredEmployees(employeeList);
+    }
+  }, [employeeList]);
 
   const loadMeetings = async () => {
     setLoading(true);
@@ -196,19 +207,19 @@ export default function AdminDashboard() {
     const now = new Date();
     const start = new Date(startTime);
     const end = new Date(endTime);
-    if (now < start) return "upcoming";
-    if (now >= start && now <= end) return "ongoing";
-    return "completed";
+    if (now < start) return "Mendatang";
+    if (now >= start && now <= end) return "Berlangsung";
+    return "Selesai";
   };
 
   const getStatusBadge = (status) => {
     const base = "px-2 py-1 rounded-full text-xs font-medium";
     switch (status) {
-      case "upcoming":
+      case "Mendatang":
         return `${base} bg-blue-100 text-blue-800`;
-      case "ongoing":
+      case "Berlangsung":
         return `${base} bg-green-100 text-green-800`;
-      case "completed":
+      case "Selesai":
         return `${base} bg-gray-100 text-gray-800`;
       default:
         return `${base} bg-gray-100 text-gray-800`;
@@ -217,11 +228,11 @@ export default function AdminDashboard() {
 
   const getStatusText = (status) => {
     switch (status) {
-      case "upcoming":
+      case "Mendatang":
         return "Akan Datang";
-      case "ongoing":
+      case "Berlangsung":
         return "Berlangsung";
-      case "completed":
+      case "Selesai":
         return "Selesai";
       default:
         return "-";
@@ -364,7 +375,7 @@ export default function AdminDashboard() {
   const getCurrentData = () => {
     switch (activeTab) {
       case "employee":
-        return employeeList;
+        return filteredEmployees;
       case "unit":
         return unitList;
       case "room":
@@ -514,6 +525,23 @@ export default function AdminDashboard() {
     window.location.reload();
   };
 
+  useEffect(() => {
+    console.log(searchQuery, filterUnit, "ini search dan unit");
+    setFilteredEmployees(
+      employeeList.filter((emp) => {
+        const matchName = searchQuery
+          ? emp.name.toLowerCase().includes(searchQuery.toLowerCase())
+          : true;
+
+        const matchUnit = filterUnit
+          ? emp.unitId.toLowerCase().includes(filterUnit.toLowerCase())
+          : true;
+
+        return matchUnit && matchName;
+      })
+    );
+  }, [filterUnit, searchQuery, employeeList]);
+
   return (
     <div className="w-full min-h-screen bg-gray-50">
       <div className="flex">
@@ -650,7 +678,7 @@ export default function AdminDashboard() {
                       <div className="flex items-center gap-3">
                         <label
                           htmlFor="sortOrder"
-                          className="text-sm font-medium text-gray-700"
+                          className="text-sm font-medium text-black"
                         >
                           Urutkan:
                         </label>
@@ -658,7 +686,7 @@ export default function AdminDashboard() {
                           id="sortOrder"
                           value={sortOrder}
                           onChange={(e) => setSortOrder(e.target.value)}
-                          className="block w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md"
+                          className="block w-full sm:w-auto text-black px-3 py-2 text-sm border border-gray-300 rounded-md"
                         >
                           <option value="desc">Terbaru</option>
                           <option value="asc">Terlama</option>
@@ -678,7 +706,7 @@ export default function AdminDashboard() {
                             id="filterDate"
                             value={filterDate}
                             onChange={(e) => setFilterDate(e.target.value)}
-                            className="block w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md"
+                            className="block w-full sm:w-auto text-sm text-black px-3 py-2 border border-gray-300 rounded-md"
                           />
                           {filterDate && (
                             <button
@@ -704,7 +732,55 @@ export default function AdminDashboard() {
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
                           placeholder="Cari berdasarkan nama rapat..."
-                          className="block w-full px-3 py-2 border border-gray-300 rounded-md"
+                          className="block w-full px-3 text-black text-sm py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {activeTab === "employee" && (
+                  <div className="bg-white rounded-lg shadow-none border border-gray-100 p-4 mb-4">
+                    <div className="flex flex-col sm:flex-row gap-4 items-center">
+                      {/* Filter Tanggal */}
+
+                      {/* Dropdown Unit */}
+                      <div className="flex items-center gap-3">
+                        <label
+                          htmlFor="filterUnit"
+                          className="text-sm font-medium text-gray-700"
+                        >
+                          Unit:
+                        </label>
+                        <select
+                          id="filterUnit"
+                          value={filterUnit}
+                          onChange={(e) => setFilterUnit(e.target.value)}
+                          className="block w-full sm:w-auto text-sm text-black px-3 py-2 border border-gray-300 rounded-md"
+                        >
+                          <option value="">Semua Unit</option>
+                          {unitList.map((unit, index) => (
+                            <option key={unit.id} value={unit.id}>
+                              {unit.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Search Nama */}
+                      <div className="flex items-center gap-3 flex-grow">
+                        <label
+                          htmlFor="searchEmployee"
+                          className="text-sm font-medium text-gray-700"
+                        >
+                          Cari Nama:
+                        </label>
+                        <input
+                          type="text"
+                          id="searchEmployee"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="Cari berdasarkan nama pegawai..."
+                          className="block w-full text-black text-sm px-3 py-2 border border-gray-300 rounded-md"
                         />
                       </div>
                     </div>

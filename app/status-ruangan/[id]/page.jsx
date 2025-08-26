@@ -147,10 +147,10 @@ export default function StatusRuanganDetail() {
   console.log(currentMeeting);
 
   function getStatus(start, end, now, readable = false) {
-    if (end < now) return readable ? "Selesai" : "selesai";
+    if (end < now) return readable ? "Selesai" : "Selesai";
     if (start <= now && end >= now)
-      return readable ? "Berlangsung" : "berlangsung";
-    return readable ? "Mendatang" : "mendatang";
+      return readable ? "Berlangsung" : "Berlangsung";
+    return readable ? "Mendatang" : "Mendatang";
   }
 
   console.log("ini data ruangan", dataRuangan);
@@ -264,9 +264,9 @@ export default function StatusRuanganDetail() {
 
   function getMeetingStatus(start, end) {
     const now = new Date();
-    if (now < start) return "mendatang";
-    if (now >= start && now <= end) return "berlangsung";
-    return "selesai";
+    if (now < start) return "Mendatang";
+    if (now >= start && now <= end) return "Berlangsung";
+    return "Selesai";
   }
 
   function transformRoomsSelectedTanggalAndSelectedRoom(data, selectedDate) {
@@ -621,11 +621,11 @@ export default function StatusRuanganDetail() {
     const endHour = slotHour + meeting.duration;
 
     if (currentHour >= slotHour && currentHour < endHour) {
-      return "ongoing";
+      return "Berlangsung";
     } else if (currentHour < slotHour) {
-      return "upcoming";
+      return "Mendatang";
     } else {
-      return "finished";
+      return "Selesai";
     }
   };
 
@@ -669,15 +669,15 @@ export default function StatusRuanganDetail() {
     };
 
     switch (status) {
-      case "ongoing":
+      case "Berlangsung":
         return `bg-green-100 border-2 ${
           priorityColors[meeting?.priority]
         } text-green-800`;
-      case "upcoming":
+      case "Mendatang":
         return `bg-blue-100 border-2 ${
           priorityColors[meeting?.priority]
         } text-blue-800`;
-      case "finished":
+      case "Selesai":
         return `bg-gray-100 border-2 ${
           priorityColors[meeting?.priority]
         } text-gray-600`;

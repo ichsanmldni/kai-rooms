@@ -38,7 +38,7 @@ const RoomStatusGrid = () => {
           title: "Sprint Planning Q1",
           endTime: "11:00",
           participants: 8,
-          status: "berlangsung",
+          status: "Berlangsung",
           priority: "high",
           organizer: "John Doe",
           description:
@@ -67,7 +67,7 @@ const RoomStatusGrid = () => {
           title: "Campaign Strategy",
           endTime: "12:00",
           participants: 15,
-          status: "berlangsung",
+          status: "Berlangsung",
           priority: "high",
           organizer: "Sarah Wilson",
           description:
@@ -114,7 +114,7 @@ const RoomStatusGrid = () => {
           title: "Board Meeting",
           endTime: "09:30",
           participants: 6,
-          status: "selesai",
+          status: "Selesai",
           priority: "high",
           organizer: "Michael Chen",
           description:
@@ -133,7 +133,7 @@ const RoomStatusGrid = () => {
           title: "Design Review",
           endTime: "12:30",
           participants: 7,
-          status: "berlangsung",
+          status: "Berlangsung",
           priority: "medium",
           organizer: "Emma Davis",
           description: "Review design untuk project client.",
@@ -185,11 +185,11 @@ const RoomStatusGrid = () => {
     const endHour = slotHour + meeting.duration;
 
     if (currentHour >= slotHour && currentHour < endHour) {
-      return "ongoing";
+      return "Berlangsung";
     } else if (currentHour < slotHour) {
-      return "upcoming";
+      return "Mendatang";
     } else {
-      return "finished";
+      return "Selesai";
     }
   };
 
@@ -205,15 +205,15 @@ const RoomStatusGrid = () => {
     };
 
     switch (status) {
-      case "ongoing":
+      case "Berlangsung":
         return `bg-green-100 border-2 ${
           priorityColors[meeting?.priority]
         } text-green-800`;
-      case "upcoming":
+      case "Mendatang":
         return `bg-blue-100 border-2 ${
           priorityColors[meeting?.priority]
         } text-blue-800`;
-      case "finished":
+      case "Selesai":
         return `bg-gray-100 border-2 ${
           priorityColors[meeting?.priority]
         } text-gray-600`;
@@ -249,9 +249,9 @@ const RoomStatusGrid = () => {
         room,
         Object.keys(room.meetings).find((key) => room.meetings[key] === meeting)
       );
-      if (activeFilter === "berlangsung") return status === "ongoing";
-      if (activeFilter === "mendatang") return status === "upcoming";
-      if (activeFilter === "selesai") return status === "finished";
+      if (activeFilter === "Berlangsung") return status === "Berlangsung";
+      if (activeFilter === "Mendatang") return status === "Mendatang";
+      if (activeFilter === "Selesai") return status === "Selesai";
       return false;
     });
 
@@ -305,10 +305,10 @@ const RoomStatusGrid = () => {
           {/* Filter */}
           <div className="flex space-x-2 flex-wrap mb-4">
             {[
-              { key: "all", label: "All", icon: Filter },
-              { key: "berlangsung", label: "Berlangsung", icon: PlayCircle },
-              { key: "mendatang", label: "Mendatang", icon: Clock },
-              { key: "selesai", label: "Selesai", icon: CheckCircle },
+              { key: "All", label: "All", icon: Filter },
+              { key: "Berlangsung", label: "Berlangsung", icon: PlayCircle },
+              { key: "Mendatang", label: "Mendatang", icon: Clock },
+              { key: "Selesai", label: "Selesai", icon: CheckCircle },
             ].map((filter) => (
               <button
                 key={filter.key}
@@ -476,16 +476,16 @@ const RoomStatusGrid = () => {
                     </h4>
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        selectedTimeSlot.status === "ongoing"
+                        selectedTimeSlot.status === "Berlangsung"
                           ? "bg-green-100 text-green-800"
-                          : selectedTimeSlot.status === "upcoming"
+                          : selectedTimeSlot.status === "Mendatang"
                           ? "bg-blue-100 text-blue-800"
                           : "bg-gray-100 text-gray-600"
                       }`}
                     >
-                      {selectedTimeSlot.status === "ongoing"
+                      {selectedTimeSlot.status === "Berlangsung"
                         ? "Sedang Berlangsung"
-                        : selectedTimeSlot.status === "upcoming"
+                        : selectedTimeSlot.status === "Mendatang"
                         ? "Akan Datang"
                         : "Selesai"}
                     </span>
