@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { loginUser } from "../../api-client/user";
 import Link from "next/link";
 import React, { useState } from "react";
@@ -10,11 +10,13 @@ function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   // Tambahkan state untuk form
   const [formDataLogin, setFormDataLogin] = useState({
-    email: "",
+    identifier: "",
     password: "",
   });
+  const [isLoadingSubmitLogin, setisLoadingSubmitLogin] = useState(false);
 
   const handleLogin = async (e) => {
+    setisLoadingSubmitLogin(true);
     e.preventDefault();
     try {
       const res = await loginUser({ ...formDataLogin });
@@ -29,12 +31,14 @@ function LoginPage() {
           progress: undefined,
           theme: "colored",
         });
+        setisLoadingSubmitLogin(false);
         setTimeout(() => {
           window.location.href = "/dashboard";
         }, 1000);
       }
     } catch (err) {
       console.log(err);
+      setisLoadingSubmitLogin(false);
       toast.error(err.response?.data.message || "Login berhasil!", {
         position: "bottom-right",
         autoClose: 3000,
@@ -126,14 +130,14 @@ function LoginPage() {
 
           <input
             type="email"
-            placeholder="Masukkan Email"
+            placeholder="Masukkan NIPP / Email"
             className="w-full p-3 text-black rounded-md border border-gray-900 text-sm mb-3 focus:outline-none focus:border-[#7f5fff]"
-            value={formDataLogin.email}
+            value={formDataLogin.identifier}
             onKeyDown={handleKeyDown}
             onChange={(e) =>
               setFormDataLogin((prev) => ({
                 ...prev,
-                email: e.target.value,
+                identifier: e.target.value,
               }))
             }
           />
@@ -184,10 +188,15 @@ function LoginPage() {
           </div>
 
           <button
-            className="w-full p-3 bg-[#5a60ea] text-white rounded-lg text-base font-medium mb-3 hover:bg-[#4a50d0] transition"
+            className="w-full p-3 bg-[#5a60ea] text-white cursor-pointer rounded-lg text-base font-medium mb-3 hover:bg-[#4a50d0] transition flex items-center justify-center"
             onClick={handleLogin}
+            disabled={isLoadingSubmitLogin} // biar tombol ga bisa diklik berulang
           >
-            Masuk
+            {isLoadingSubmitLogin ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              "Masuk"
+            )}
           </button>
           {/* 
         <button className="w-full p-3 text-sm border border-gray-300 bg-white text-gray-800 rounded-lg flex items-center justify-center gap-2 mb-2 hover:bg-gray-100 transition">

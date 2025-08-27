@@ -28,7 +28,7 @@ const Pengaturan = () => {
   const router = useRouter();
   const [notificationCount, setNotificationCount] = useState(0);
   const [dataNotification, setDataNotification] = useState([]);
-  const [activeTab, setActiveTab] = useState("profil");
+  const [activeTab, setActiveTab] = useState("faq");
   const [isLoading, setIsLoading] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [isModalNotificationOpen, setIsModalNotificationOpen] = useState(false);
@@ -287,77 +287,59 @@ const Pengaturan = () => {
 
   const renderKontenTab = () => {
     const tabContent = {
-      profil: {
-        title: "Informasi Profil",
-        content: (
-          <div className="space-y-4">
-            {/* Form Fields */}
-            <div className="grid gap-4">
-              {[
-                { key: "nama", label: "Nama Lengkap", type: "text" },
-                { key: "email", label: "Email", type: "email" },
-                { key: "noTelp", label: "No. Telepon", type: "tel" },
-                { key: "nipp", label: "NIPP", type: "text" },
-              ].map(({ key, label, type }) => {
-                const isNipp = key === "nipp";
-                return (
-                  <div key={key}>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {label}
-                    </label>
-                    <input
-                      type={type}
-                      value={userData[key] || ""}
-                      onChange={
-                        (e) =>
-                          !isNipp &&
-                          handleUbahInput("profil", key, e.target.value) // cegah perubahan kalau NIPP
-                      }
-                      disabled={isNipp}
-                      className={`w-full text-black px-3 py-2 text-sm border rounded-md transition-colors ${
-                        isNipp
-                          ? "bg-gray-100 border-gray-300 cursor-not-allowed text-gray-500"
-                          : "border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#1b68b0] focus:border-[#1b68b0]"
-                      }`}
-                      placeholder={`Masukkan ${label.toLowerCase()}`}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ),
-      },
-      pengaturan: {
-        title: "Pengaturan",
+      faq: {
+        title: "FAQ",
         content: (
           <div className="space-y-2">
             {[
               {
-                key: "emailNotifikasi",
-                label: "Notifikasi Email",
-                desc: "Kirim pemberitahuan ke email",
+                key: "caraBooking",
+                label: "Bagaimana cara melakukan booking ruangan?",
+                desc: "Anda dapat memilih ruangan yang tersedia, lalu klik tombol 'Booking' dan isi detail rapat sesuai kebutuhan.",
               },
               {
-                key: "pengingatRapat",
-                label: "Pengingat Rapat",
-                desc: "Ingatkan 15 menit sebelum rapat",
+                key: "ubahJadwal",
+                label: "Apakah jadwal booking bisa diubah?",
+                desc: "Ya, Anda dapat mengubah jadwal booking selama ruangan belum digunakan. Cukup buka menu 'Riwayat Booking' dan pilih opsi 'Edit'.",
+              },
+              {
+                key: "batalBooking",
+                label: "Bagaimana cara membatalkan booking?",
+                desc: "Booking dapat dibatalkan melalui menu 'Riwayat Booking'. Setelah dibatalkan, ruangan akan otomatis tersedia kembali.",
+              },
+              {
+                key: "notifikasi",
+                label: "Apakah sistem mengirimkan notifikasi?",
+                desc: "Ya, sistem akan mengirimkan email notifikasi setelah booking berhasil serta pengingat 15 menit sebelum rapat dimulai.",
+              },
+              {
+                key: "aksesRuangan",
+                label: "Siapa saja yang dapat mengakses ruangan?",
+                desc: "Ruangan dapat diakses oleh karyawan KAI yang telah memiliki akun aktif di sistem booking.",
               },
             ].map(({ key, label, desc }) => (
               <div
                 key={key}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                <div>
-                  <h3 className="text-sm font-medium text-gray-900">{label}</h3>
-                  <p className="text-xs text-gray-500">{desc}</p>
-                </div>
-                <ToggleSwitch
-                  aktif={notifikasi[key]}
-                  onToggle={() => handleToggle("notifikasi", key)}
-                />
+                <h3 className="text-sm font-medium text-gray-900">{label}</h3>
+                <p className="text-xs text-gray-500">{desc}</p>
               </div>
             ))}
+          </div>
+        ),
+      },
+      kontak: {
+        title: "Kontak Administrator",
+        content: (
+          <div>
+            <p className="text-xs text-gray-500">
+              Silakan hubungi administrator melalui email berikut jika mengalami
+              kendala sistem booking:
+            </p>
+            <p className="text-sm font-semibold text-blue-600 mt-1">
+              itdaop1jak2021@gmail.com
+            </p>
           </div>
         ),
       },
@@ -379,8 +361,8 @@ const Pengaturan = () => {
   };
 
   const tabLabels = {
-    profil: "Profil",
-    pengaturan: "Pengaturan",
+    faq: "FAQ",
+    kontak: "Kontak Administrator",
   };
 
   const formatDate = (date) => {
@@ -452,12 +434,12 @@ const Pengaturan = () => {
                 icon: Settings,
                 label: "Pengaturan & Profil",
                 href: "/pengaturan",
-                active: true,
               },
               {
                 icon: HelpCircle,
                 label: "Bantuan",
                 href: "/bantuan",
+                active: true,
               },
             ].map((item, index) => (
               <li key={index}>
@@ -556,33 +538,7 @@ const Pengaturan = () => {
 
             {/* Content Container */}
             <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/50 p-8">
-              <div className="">
-                {renderKontenTab()}
-
-                <div className="mt-8 flex justify-center space-x-4 pt-6 border-t border-gray-200/50">
-                  <button
-                    className="bg-gray-500 text-sm cursor-pointer text-white px-6 py-2 rounded-lg hover:bg-gray-600 transition-colors shadow-sm"
-                    onClick={handleKembali}
-                  >
-                    Kembali
-                  </button>
-                  <button
-                    className={`px-6 py-2 rounded-lg text-sm transition-colors shadow-sm ${
-                      isLoading
-                        ? "bg-gray-400 text-white cursor-not-allowed"
-                        : "bg-[#1b68b0] text-white cursor-pointer hover:bg-[#1b68b0]/90"
-                    }`}
-                    onClick={
-                      activeTab === "profil"
-                        ? handleSimpanProfile
-                        : handleSimpanSetting
-                    }
-                    disabled={isLoading}
-                  >
-                    {isLoading ? "Menyimpan..." : "Simpan"}
-                  </button>
-                </div>
-              </div>
+              {renderKontenTab()}
             </div>
           </div>
 

@@ -51,6 +51,10 @@ import {
   ChevronLeft,
   Info,
   LinkIcon,
+  HelpCircle,
+  AlertTriangle,
+  Edit,
+  Trash,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -65,12 +69,18 @@ import {
   fetchNotificationList,
   updatedNotificationRead,
 } from "../../api-client/notification";
-import { createMeeting, fetchMeetingList } from "../../api-client/meeting";
+import {
+  createMeeting,
+  deleteMeeting,
+  fetchMeetingList,
+  updateMeeting,
+} from "../../api-client/meeting";
 import { toast, ToastContainer } from "react-toastify";
 import { useRouter, useSearchParams } from "next/navigation";
 import { jwtDecode } from "jwt-decode";
 import { set } from "date-fns";
 import Image from "next/image";
+import { format } from "path";
 
 const KaiRoomsApp = () => {
   const searchParams = useSearchParams();
@@ -80,6 +90,8 @@ const KaiRoomsApp = () => {
   const [showPopup, setShowPopup] = useState(false);
   const [showSearchPopup, setShowSearchPopup] = useState(false);
   const [showDetailPopup, setShowDetailPopup] = useState(false);
+  const [showEditPopup, setShowEditPopup] = useState(false);
+  const [showDeletePopup, setShowDeletePopup] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
@@ -101,7 +113,6 @@ const KaiRoomsApp = () => {
   const [userData, setUserData] = useState(null);
   const [employeeData, setEmployeeData] = useState(null);
 
-  console.log("ini todat", dataRoomsToday);
   const router = useRouter();
 
   const handleShowDetailRooms = (room) => {
@@ -115,6 +126,7 @@ const KaiRoomsApp = () => {
     penyelenggara: "",
     namaRapat: "",
     tanggal: "",
+    deskripsi: "",
     waktuMulai: "",
     waktuSelesai: "",
     lokasi: "",
@@ -125,6 +137,7 @@ const KaiRoomsApp = () => {
     catatan: "",
     pesertaRapat: [],
     kirimUndanganEmail: false,
+    mulaiSekarang: false,
     createdById: "",
   });
 
@@ -132,8 +145,17 @@ const KaiRoomsApp = () => {
   const [notificationCount, setNotificationCount] = useState(0);
   const [dataNotification, setDataNotification] = useState([]);
   const [isLoadingSubmit, setIsLoadingSubmit] = useState(false);
+  const [isLoadingEdit, setIsLoadingEdit] = useState(false);
+  const [isLoadingDelete, setIsLoadingDelete] = useState(false);
   const [typePopUpBook, setTypePopUpBook] = useState("room");
   const [selectedRoom, setSelectedRoom] = useState(undefined);
+  const [showConfirmationPopUp, setShowConfirmationPopUp] = useState(false);
+  const [confirmationType, setConfirmationType] = useState(""); // "booking", "delete", "cancel", "edit"
+  const [confirmationMessage, setConfirmationMessage] = useState("");
+  const [confirmationDetails, setConfirmationDetails] = useState(null);
+  const [confirmationWarning, setConfirmationWarning] = useState("");
+  const [isConfirmationLoading, setIsConfirmationLoading] = useState(false);
+  const [confirmationAction, setConfirmationAction] = useState(null);
 
   const timeSlots = [];
   for (let hour = 0; hour < 24; hour++) {
@@ -156,11 +178,15 @@ const KaiRoomsApp = () => {
     upcomingMeetings
   );
 
-  function getStatus(start, end, now, readable = false) {
-    if (end < now) return readable ? "Selesai" : "selesai";
-    if (start <= now && end >= now)
-      return readable ? "Berlangsung" : "berlangsung";
-    return readable ? "Mendatang" : "mendatang";
+  function getStatus(start, end, now, forNearest = false) {
+    if (!end) {
+      // kalau endTime null → dianggap ongoing kalau sudah dimulai
+      return start <= now ? "Berlangsung" : "Mendatang";
+    }
+
+    if (start <= now && end >= now) return "Berlangsung";
+    if (start > now) return "Mendatang";
+    if (end < now) return "Selesai";
   }
 
   useEffect(() => {
@@ -319,9 +345,9 @@ const KaiRoomsApp = () => {
 
   function getMeetingStatus(start, end) {
     const now = new Date();
-    if (now < start) return "mendatang";
-    if (now >= start && now <= end) return "berlangsung";
-    return "selesai";
+    if (now < start) return "Mendatang";
+    if (now >= start && now <= end) return "Berlangsung";
+    return "Selesai";
   }
 
   useEffect(() => {
@@ -418,7 +444,7 @@ const KaiRoomsApp = () => {
             acc[unit] = [];
           }
           acc[unit].push({
-            label: pegawai.name,
+            label: `${pegawai.nipp} ${pegawai.name}`,
             value: pegawai.id,
           });
           return acc;
@@ -601,22 +627,22 @@ const KaiRoomsApp = () => {
 
     for (const m of dataMeetingsUser) {
       const startTime = new Date(m.startTime);
-      const endTime = new Date(m.endTime);
+      const endTime = m.endTime ? new Date(m.endTime) : null;
       const tanggal = startTime.toISOString().split("T")[0];
       const time = startTime.toTimeString().slice(0, 5);
-      const end = endTime.toTimeString().slice(0, 5);
+
+      // format tampilan waktu selesai
+      const end = endTime?.toTimeString().slice(0, 5);
 
       const meeting = {
         id: m.id,
         title: m.title,
-        lokasi: "Jakarta Pusat",
         room: m.room?.name,
         unit: m.participants?.[0]?.unit?.name || "-",
         time,
-        endTime: end,
+        endTime: end, // bisa "selesai"
         tanggal,
         participants: m.meetingAttendees?.length || 0,
-        priority: "medium",
         status: getStatus(startTime, endTime, today),
         type: m.type ? m.type : "offline",
       };
@@ -624,9 +650,20 @@ const KaiRoomsApp = () => {
       if (isSameDay(startTime, today)) {
         todayList.push(meeting);
 
-        // Cari meeting terdekat yang belum dimulai atau sedang berlangsung
-        // Kalau sedang berlangsung → langsung pilih sebagai nearest
-        if (startTime <= today && endTime >= today) {
+        // === Logic nearest ===
+        const isOngoing =
+          startTime <= today &&
+          // kalau endTime null → ongoing cuma valid kalau tidak ada meeting lain
+          ((!endTime &&
+            !dataMeetingsUser.some(
+              (mm) =>
+                isSameDay(new Date(mm.startTime), today) &&
+                new Date(mm.startTime) > startTime && // meeting setelahnya
+                new Date(mm.startTime) <= today // sudah masuk waktunya
+            )) ||
+            (endTime && endTime >= today)); // ada endTime & belum selesai
+
+        if (isOngoing) {
           nearest = {
             id: m.id,
             title: m.title,
@@ -643,9 +680,8 @@ const KaiRoomsApp = () => {
             ruangan: m.room?.name,
             linkMeet: m.linkMeet || "-",
           };
-          nearestDiff = 0; // langsung jadi prioritas utama
+          nearestDiff = 0;
         } else if (startTime >= today) {
-          // Meeting yang belum dimulai → ambil yang terdekat setelah sekarang
           const diff = startTime.getTime() - today.getTime();
           if (diff < nearestDiff) {
             nearest = {
@@ -660,7 +696,7 @@ const KaiRoomsApp = () => {
                 day: "numeric",
               }),
               time,
-              endTime: end,
+              endTime: end || "selesai",
               ruangan: m.room?.name,
               linkMeet: m.linkMeet || "-",
             };
@@ -668,11 +704,9 @@ const KaiRoomsApp = () => {
           }
         }
 
-        // Tambahkan semua meeting hari ini (kecuali yang sedang berlangsung) ke upcoming
-        // agar tidak ada yang terlewat
+        // === Upcoming list ===
         if (startTime > today) {
-          // meeting yang belum dimulai
-          const tanggalFormat = new Date(tanggal).toLocaleDateString("id-ID", {
+          const tanggalFormat = startTime.toLocaleDateString("id-ID", {
             weekday: "long",
             day: "numeric",
             month: "long",
@@ -683,9 +717,10 @@ const KaiRoomsApp = () => {
             title: m.title,
             time,
             endTime: end,
-            unit: m.organizerUnit.name || "-",
+            unit: m.organizerUnit?.name || "-",
             tanggal: tanggalFormat,
             type: m.type ? m.type : "offline",
+            createdById: m.createdById,
           });
         }
       } else if (startTime > today) {
@@ -704,6 +739,7 @@ const KaiRoomsApp = () => {
           unit: m.organizerUnit.name || "-",
           tanggal: tanggalFormat,
           type: m.type ? m.type : "offline",
+          createdById: m.createdById,
         });
       }
     }
@@ -722,10 +758,10 @@ const KaiRoomsApp = () => {
 
   console.log("ini data rooms selected tanggal", dataRoomsSelectedTanggal);
 
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  // useEffect(() => {
+  //   const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+  //   return () => clearInterval(timer);
+  // }, []);
 
   useEffect(() => {
     const jenis = formDataBookingRoom.jenisRapat;
@@ -781,9 +817,99 @@ const KaiRoomsApp = () => {
 
   console.log("inih form", formDataBookingRoom);
 
-  const handleSubmit = async (e) => {
+  const openConfirmationModal = ({
+    type = "booking",
+    message = "",
+    details = null,
+    warning = "",
+    onConfirm = null,
+  }) => {
+    setConfirmationType(type);
+    setConfirmationMessage(message);
+    setConfirmationDetails(details);
+    setConfirmationWarning(warning);
+    setConfirmationAction(() => onConfirm);
+    setShowConfirmationPopUp(true);
+  };
+
+  const closeConfirmationModal = () => {
+    setFormDataBookingRoom({
+      penyelenggara: "",
+      namaRapat: "",
+      tanggal: "",
+      waktuMulai: "",
+      waktuSelesai: "",
+      ruangan: "",
+      jenisRapat: "Offline",
+      deskripsi: "",
+      linkMeet: "",
+      catatan: "",
+      pesertaRapat: [],
+      kirimUndanganEmail: false,
+      mulaiSekarang: false,
+      createdById: userData?.id || "", // tambahkan ini
+    });
+    setShowConfirmationPopUp(false);
+    setConfirmationType("");
+    setConfirmationMessage("");
+    setConfirmationDetails(null);
+    setConfirmationWarning("");
+    setConfirmationAction(null);
+    setIsConfirmationLoading(false);
+  };
+
+  // Function untuk handle confirm action
+  const handleConfirmAction = async () => {
+    if (confirmationAction) {
+      setIsConfirmationLoading(true);
+      try {
+        await confirmationAction();
+        closeConfirmationModal();
+      } catch (error) {
+        console.error("Confirmation action failed:", error);
+        setIsConfirmationLoading(false);
+        // Handle error here (show toast, etc.)
+      }
+    }
+  };
+
+  // Contoh penggunaan untuk booking confirmation
+  const handleBookingSubmit = () => {
+    const bookingDetails = {
+      namaRapat: formDataBookingRoom.namaRapat,
+      tanggal: formDataBookingRoom.tanggal,
+      waktu: {
+        mulai: formDataBookingRoom.waktuMulai,
+        selesai: formDataBookingRoom.waktuSelesai,
+      },
+      ruangan: roomsOptions.find((r) => r.id === formDataBookingRoom.ruangan)
+        ?.name,
+      jenisRapat: formDataBookingRoom.jenisRapat,
+      pesertaCount: formDataBookingRoom.pesertaRapat?.length,
+    };
+
+    openConfirmationModal({
+      type:
+        typePopUpBook === "meeting"
+          ? "meeting"
+          : typePopUpBook === "room"
+          ? "booking"
+          : undefined,
+      message: `Apakah Anda yakin ingin ${
+        typePopUpBook === "room" ? "booking ruangan" : "membuat meeting"
+      } ini?`,
+      details: bookingDetails,
+      warning: formDataBookingRoom.kirimUndanganEmail
+        ? "Undangan meeting akan dikirim ke email semua peserta."
+        : null,
+      onConfirm: async () => {
+        await handleSubmit(); // pake e dari atas
+      },
+    });
+  };
+
+  const handleSubmit = async () => {
     setIsLoadingSubmit(true);
-    e.preventDefault();
     try {
       async function loadNotification() {
         try {
@@ -799,7 +925,6 @@ const KaiRoomsApp = () => {
         tanggal: formDataBookingRoom.tanggal,
         waktuMulai: formDataBookingRoom.waktuMulai,
         waktuSelesai: formDataBookingRoom.waktuSelesai,
-        lokasi: formDataBookingRoom.lokasi,
         ruangan: formDataBookingRoom.ruangan,
         jenisRapat: formDataBookingRoom.jenisRapat,
         linkMeet:
@@ -807,10 +932,11 @@ const KaiRoomsApp = () => {
           formDataBookingRoom.jenisRapat === "Hybrid"
             ? formDataBookingRoom.linkMeet
             : "",
-        kapasitas: formDataBookingRoom.kapasitas,
         catatan: formDataBookingRoom.catatan,
+        deskripsi: formDataBookingRoom.deskripsi,
         pesertaRapat: formDataBookingRoom.pesertaRapat,
         kirimUndanganEmail: formDataBookingRoom.kirimUndanganEmail,
+        mulaiSekarang: formDataBookingRoom.mulaiSekarang,
         createdById: formDataBookingRoom.createdById,
       });
       setIsLoadingSubmit(false);
@@ -838,17 +964,18 @@ const KaiRoomsApp = () => {
         tanggal: "",
         waktuMulai: "",
         waktuSelesai: "",
-        lokasi: "",
         ruangan: "",
+        deskripsi: "",
         jenisRapat: "Offline",
         linkMeet: "",
-        kapasitas: "",
         catatan: "",
+        mulaiSekarang: false,
         pesertaRapat: [employeeData.id],
         kirimUndanganEmail: false,
         createdById: userData?.id || "",
       });
       await loadNotification();
+
       setShowPopup(false);
     } catch (error) {
       setIsLoadingSubmit(false);
@@ -856,6 +983,145 @@ const KaiRoomsApp = () => {
       toast.error(
         error?.response?.data?.message ||
           "Terjadi kesalahan saat memproses booking."
+      );
+    }
+  };
+  const handleEdit = async () => {
+    setIsLoadingEdit(true);
+    try {
+      async function loadNotification() {
+        try {
+          const data = await fetchNotificationList(userData.id);
+          setDataNotification(data);
+        } catch (error) {
+          alert(error.message);
+        }
+      }
+      const meetingRes = await updateMeeting({
+        penyelenggara: formDataBookingRoom.penyelenggara,
+        namaRapat: formDataBookingRoom.namaRapat,
+        tanggal: formDataBookingRoom.tanggal,
+        waktuMulai: formDataBookingRoom.waktuMulai,
+        waktuSelesai: formDataBookingRoom.waktuSelesai,
+        ruangan: formDataBookingRoom.ruangan,
+        jenisRapat: formDataBookingRoom.jenisRapat,
+        linkMeet:
+          formDataBookingRoom.jenisRapat === "Online" ||
+          formDataBookingRoom.jenisRapat === "Hybrid"
+            ? formDataBookingRoom.linkMeet
+            : "",
+        catatan: formDataBookingRoom.catatan,
+        deskripsi: formDataBookingRoom.deskripsi,
+        pesertaRapat: formDataBookingRoom.pesertaRapat,
+        kirimUndanganEmail: formDataBookingRoom.kirimUndanganEmail,
+        mulaiSekarang: formDataBookingRoom.mulaiSekarang,
+        createdById: formDataBookingRoom.createdById,
+      });
+      setIsLoadingEdit(false);
+
+      console.log("Form submitted:", meetingRes);
+
+      toast.success(
+        `${
+          formDataBookingRoom.jenisRapat === "Online"
+            ? "Jadwal Meeting Berhasil Diubah"
+            : "Booking Ruangan Berhasil Di Ubah"
+        }`
+      );
+      const resMeetingUser = await fetchMeetingList(userData.id);
+      const resMeetingAll = await fetchMeetingList();
+      const data = await fetchRoomList();
+      const transformed = transformRooms(data);
+
+      setDataMeetingsUser(resMeetingUser);
+      setDataMeetingsAll(resMeetingAll);
+      setDataRoomsToday(transformed);
+      setFormDataBookingRoom({
+        penyelenggara: "",
+        namaRapat: "",
+        tanggal: "",
+        waktuMulai: "",
+        waktuSelesai: "",
+        ruangan: "",
+        deskripsi: "",
+        jenisRapat: "Offline",
+        linkMeet: "",
+        catatan: "",
+        mulaiSekarang: false,
+        pesertaRapat: [employeeData.id],
+        kirimUndanganEmail: false,
+        createdById: userData?.id || "",
+      });
+      await loadNotification();
+
+      setShowPopup(false);
+    } catch (error) {
+      setIsLoadingEdit(false);
+      console.log(error);
+      toast.error(
+        error?.response?.data?.message ||
+          "Terjadi kesalahan saat memproses edit."
+      );
+    }
+  };
+  const handleDelete = async (meeting) => {
+    setIsLoadingDelete(true);
+    try {
+      async function loadNotification() {
+        try {
+          const data = await fetchNotificationList(userData.id);
+          setDataNotification(data);
+        } catch (error) {
+          alert(error.message);
+        }
+      }
+      const meetingRes = await deleteMeeting(meeting.id);
+      setIsLoadingDelete(false);
+
+      console.log("Form submitted:", meetingRes);
+
+      toast.success(
+        `${
+          formDataBookingRoom.jenisRapat === "Online"
+            ? "Jadwal Meeting Berhasil Dihapus"
+            : "Booking Ruangan Berhasil Dihapus"
+        }`
+      );
+      const resMeetingUser = await fetchMeetingList(userData.id);
+      const resMeetingAll = await fetchMeetingList();
+      const data = await fetchRoomList();
+      const transformed = transformRooms(data);
+
+      setDataMeetingsUser(resMeetingUser);
+      setDataMeetingsAll(resMeetingAll);
+      setDataRoomsToday(transformed);
+      setFormDataBookingRoom({
+        penyelenggara: "",
+        namaRapat: "",
+        tanggal: "",
+        waktuMulai: "",
+        waktuSelesai: "",
+        ruangan: "",
+        deskripsi: "",
+        jenisRapat: "Offline",
+        linkMeet: "",
+        catatan: "",
+        mulaiSekarang: false,
+        pesertaRapat: [employeeData.id],
+        kirimUndanganEmail: false,
+        createdById: userData?.id || "",
+      });
+      await loadNotification();
+
+      setIsLoadingDelete(false);
+
+      setShowPopup(false);
+    } catch (error) {
+      setIsLoadingDelete(false);
+      console.log(error);
+      toast.error(
+        error?.response?.data?.message ||
+          "Terjadi kesalahan saat memproses delete."
       );
     }
   };
@@ -867,6 +1133,111 @@ const KaiRoomsApp = () => {
       meeting.title.toLowerCase().includes(searchQuery.toLowerCase())
     );
     setSearchResults(results);
+  };
+
+  const toWIBDate = (isoString) => {
+    if (!isoString) return null;
+    return new Date(isoString); // Date otomatis adjust sesuai timezone lokal browser
+  };
+
+  const formatHHMM = (date) => {
+    if (!date) return "";
+    const h = String(date.getHours()).padStart(2, "0");
+    const m = String(date.getMinutes()).padStart(2, "0");
+    return `${h}:${m}`;
+  };
+
+  const formatYYYYMMDD = (date) => {
+    if (!date) return "";
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
+  const handleShowEdit = (meeting) => {
+    const fullMeeting = dataMeetingsAll.find((m) => m.id === meeting.id);
+    const selected = fullMeeting || meeting;
+
+    setSelectedMeeting(selected);
+
+    console.log("ini selected", fullMeeting);
+    if (!selected) return;
+
+    const startDate = toWIBDate(selected.startTime);
+    const endDate = toWIBDate(selected.endTime);
+
+    setShowPopup(true);
+    setTypePopUpBook("edit meeting");
+
+    // Step 1 → set id & createdBy
+    setFormDataBookingRoom((prev) => ({
+      ...prev,
+      createdById: selected.createdById || "",
+    }));
+
+    setTimeout(() => {
+      // Step 2 → set properti utama
+      setFormDataBookingRoom((prev) => ({
+        ...prev,
+        penyelenggara: selected.organizerUnit?.name || "",
+        namaRapat: selected.title || "",
+        deskripsi: selected.description || "",
+        catatan: selected.notes || "",
+        jenisRapat: selected.type || "Offline",
+        linkMeet: selected.linkMeet || "",
+        lokasi: selected.room?.location || "",
+        ruangan: selected.room?.id || "",
+      }));
+
+      setTimeout(() => {
+        // Step 4 → ruangan & peserta
+        setFormDataBookingRoom((prev) => ({
+          ...prev,
+          kapasitas: selected.room?.capacity?.toString() || "",
+          pesertaRapat:
+            selected.meetingAttendees?.map((a) => a.employeeId) || [],
+          kirimUndanganEmail: false,
+          mulaiSekarang: false,
+        }));
+        setTimeout(() => {
+          // Step 3 → tanggal + waktu
+          setFormDataBookingRoom((prev) => ({
+            ...prev,
+            tanggal: selected.startTime ? formatYYYYMMDD(startDate) : "",
+          }));
+          setTimeout(() => {
+            // Step 3 → tanggal + waktu
+            setFormDataBookingRoom((prev) => ({
+              ...prev,
+              waktuMulai: selected.startTime ? formatHHMM(startDate) : "",
+            }));
+            setTimeout(() => {
+              // Step 3 → tanggal + waktu
+              setFormDataBookingRoom((prev) => ({
+                ...prev,
+                waktuSelesai: selected.endTime ? formatHHMM(endDate) : "",
+              }));
+            }, 50);
+          }, 50);
+        }, 50);
+      }, 50);
+    }, 50);
+  };
+  const handleShowDelete = (meeting) => {
+    const fullMeeting = dataMeetingsAll.find((m) => m.id === meeting.id);
+    const selected = fullMeeting || meeting;
+
+    setSelectedMeeting(selected);
+
+    console.log("ini selected", fullMeeting);
+    if (!selected) return;
+
+    const startDate = toWIBDate(selected.startTime);
+    const endDate = toWIBDate(selected.endTime);
+
+    setShowPopup(true);
+    setTypePopUpBook("delete meeting");
   };
 
   const handleShowDetail = (meeting) => {
@@ -921,23 +1292,6 @@ const KaiRoomsApp = () => {
     }
   };
 
-  const renderStatus = (status) => {
-    const statusConfig = {
-      ongoing: { text: "Berlangsung", color: "bg-green-500", icon: PlayCircle },
-      upcoming: { text: "Mendatang", color: "bg-blue-500", icon: Clock },
-      completed: { text: "Selesai", color: "bg-gray-400", icon: CheckCircle },
-    };
-
-    const config = statusConfig[status] || statusConfig.upcoming;
-
-    return (
-      <div className="flex items-center space-x-2">
-        <div className={`w-2 h-2 rounded-full ${config.color}`}></div>
-        <span className="text-xs font-medium text-gray-700">{config.text}</span>
-      </div>
-    );
-  };
-
   const filteredMeetings = todayMeetings.filter((meeting) => {
     if (activeFilter === "all") return true;
     return meeting.status === activeFilter;
@@ -950,13 +1304,13 @@ const KaiRoomsApp = () => {
       tanggal: "",
       waktuMulai: "",
       waktuSelesai: "",
-      lokasi: "",
       ruangan: "",
       jenisRapat: "Offline",
+      deskripsi: "",
       linkMeet: "",
-      kapasitas: "",
       catatan: "",
       pesertaRapat: [],
+      mulaiSekarang: false,
       kirimUndanganEmail: false,
       createdById: userData?.id || "", // tambahkan ini
     });
@@ -980,52 +1334,6 @@ const KaiRoomsApp = () => {
     }
     return true;
   };
-
-  // const getAvailableEndSlots = () => {
-  //   if (!formDataBookingRoom.waktuMulai || !formDataBookingRoom.tanggal)
-  //     return [];
-
-  //   const selectedRoom = dataRoomsSelectedTanggal?.[0];
-  //   const selectedDate = new Date(formDataBookingRoom.tanggal);
-  //   const startIdx = allSlots.indexOf(formDataBookingRoom.waktuMulai);
-
-  //   const availableSlots = [];
-
-  //   for (let endIdx = startIdx + 1; endIdx < allSlots.length; endIdx++) {
-  //     const startTimeStr = allSlots[startIdx];
-  //     const endTimeStr = allSlots[endIdx]; // ✅ ini akses langsung slot selanjutnya
-
-  //     const [startHour, startMinute] = startTimeStr.split(":").map(Number);
-  //     const [endHour, endMinute] = endTimeStr.split(":").map(Number);
-
-  //     const bookingStart = new Date(selectedDate);
-  //     bookingStart.setHours(startHour, startMinute, 0, 0);
-
-  //     const bookingEnd = new Date(selectedDate);
-  //     bookingEnd.setHours(endHour, endMinute, 0, 0);
-
-  //     const hasConflict = Object.entries(selectedRoom?.meetings || {}).some(
-  //       ([meetingStartStr, meeting]) => {
-  //         const [mStartH, mStartM] = meetingStartStr.split(":").map(Number);
-  //         const [mEndH, mEndM] = meeting.endTime.split(":").map(Number);
-
-  //         const meetingStart = new Date(selectedDate);
-  //         meetingStart.setHours(mStartH, mStartM, 0, 0);
-
-  //         const meetingEnd = new Date(selectedDate);
-  //         meetingEnd.setHours(mEndH, mEndM, 0, 0);
-
-  //         return bookingStart < meetingEnd && bookingEnd > meetingStart;
-  //       }
-  //     );
-
-  //     if (hasConflict) break;
-
-  //     availableSlots.push(endTimeStr);
-  //   }
-
-  //   return availableSlots;
-  // };
 
   const handleSlotClick = (room, timeSlot) => {
     console.log(
@@ -1065,13 +1373,61 @@ const KaiRoomsApp = () => {
         setTimeout(() => {
           setFormDataBookingRoom((prev) => ({
             ...prev,
-            lokasi: room?.location || "",
-            kapasitas: room?.capacity || "",
             penyelenggara: "",
             namaRapat: "",
-            jenisRapat: "Offline",
+
             linkMeet: "",
             catatan: "",
+            deskripsi: "",
+            mulaiSekarang: false,
+            pesertaRapat: [employeeData.id],
+            kirimUndanganEmail: false,
+          }));
+
+          setShowPopup(true);
+        }, 50); // step 4
+      }, 50); // step 3
+    }, 50); // step 2
+  };
+  const handleSlotClickVisualization = (room, timeSlot) => {
+    console.log(
+      "ini meeting raw",
+      room,
+      timeSlot,
+      room?.meetings?.[timeSlot.start]
+    );
+
+    setSelectedRoom(room);
+    setFormDataBookingRoom((prev) => ({
+      ...prev,
+      ruangan: room?.id || "",
+    }));
+
+    setTimeout(() => {
+      setFormDataBookingRoom((prev) => ({
+        ...prev,
+        tanggal: new Date().toLocaleDateString("sv-SE", {
+          timeZone: "Asia/Jakarta",
+        }),
+      }));
+
+      setTimeout(() => {
+        setFormDataBookingRoom((prev) => ({
+          ...prev,
+          waktuMulai: timeSlot.start,
+          waktuSelesai: timeSlot.end,
+        }));
+
+        setTimeout(() => {
+          setFormDataBookingRoom((prev) => ({
+            ...prev,
+            penyelenggara: "",
+            namaRapat: "",
+
+            linkMeet: "",
+            catatan: "",
+            deskripsi: "",
+            mulaiSekarang: false,
             pesertaRapat: [employeeData.id],
             kirimUndanganEmail: false,
           }));
@@ -1095,25 +1451,44 @@ const KaiRoomsApp = () => {
     const endHour = slotHour + meeting.duration;
 
     if (currentHour >= slotHour && currentHour < endHour) {
-      return "ongoing";
+      return "Berlangsung";
     } else if (currentHour < slotHour) {
-      return "upcoming";
+      return "Mendatang";
     } else {
-      return "finished";
+      return "Selesai";
     }
+  };
+
+  const parseHHMM = (hhmm) => {
+    const [h, m] = hhmm.split(":").map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d;
   };
 
   const isSlotSpanned = (room, timeSlot) => {
     if (!room || !timeSlot || !room.meetings) return false;
 
-    const slotHour = parseInt(timeSlot.split(":")[0]);
+    // parse HH:mm ke Date
+    const parseHHMM = (hhmm) => {
+      const [h, m] = hhmm.split(":").map(Number);
+      const d = new Date();
+      d.setHours(h, m, 0, 0);
+      return d;
+    };
 
-    for (const [startTime, meeting] of Object.entries(room.meetings)) {
-      const startHour = parseInt(startTime.split(":")[0]);
-      const durationInHours = Math.ceil(meeting.duration / 4); // konversi 15 menit -> jam
-      const endHour = startHour + durationInHours;
+    const slotStart = parseHHMM(timeSlot);
 
-      if (slotHour > startHour && slotHour < endHour) {
+    for (const meeting of Object.values(room.meetings)) {
+      const mStart = parseHHMM(meeting.startTime);
+      const mEnd = parseHHMM(meeting.endTime);
+
+      if (mEnd <= mStart) {
+        mEnd.setDate(mEnd.getDate() + 1); // handle overnight
+      }
+
+      // kalau slot start di tengah meeting (bukan tepat di awal)
+      if (slotStart > mStart && slotStart < mEnd) {
         return true;
       }
     }
@@ -1122,10 +1497,31 @@ const KaiRoomsApp = () => {
   };
 
   const getSlotSpan = (meeting) => {
-    if (!meeting?.duration) return 1;
+    if (!meeting?.startTime || !meeting?.endTime) {
+      return 1;
+    }
 
-    // Durasi dihitung per 15 menit → 4 slot = 1 jam
-    return Math.ceil(meeting.duration / 4);
+    const startHour = parseInt(meeting.startTime.split(":")[0]);
+    const startMinute = parseInt(meeting.startTime.split(":")[1]);
+    const endHour = parseInt(meeting.endTime.split(":")[0]);
+    const endMinute = parseInt(meeting.endTime.split(":")[1]);
+
+    // Periksa apakah meeting dimulai dan berakhir tidak di menit :00
+    // Contoh: 21:15 - 22:15 atau 14:30 - 15:30
+    if (startMinute !== 0 && endMinute !== 0) {
+      // Jika start dan end time-nya beda jam, maka span-nya (endHour - startHour) + 1
+      if (endHour > startHour) {
+        return endHour - startHour + 1;
+      }
+    }
+
+    // Jika kondisi di atas tidak terpenuhi, hitung span berdasarkan durasi per 15 menit
+    // (logika awal Anda)
+    if (meeting.duration) {
+      return Math.ceil(meeting.duration / 4);
+    }
+
+    return 1;
   };
 
   const getSlotColor = (status, meeting) => {
@@ -1140,15 +1536,15 @@ const KaiRoomsApp = () => {
     };
 
     switch (status) {
-      case "ongoing":
+      case "Berlangsung":
         return `bg-green-100 border-2 ${
           priorityColors[meeting?.priority]
         } text-green-800`;
-      case "upcoming":
+      case "Mendatang":
         return `bg-blue-100 border-2 ${
           priorityColors[meeting?.priority]
         } text-blue-800`;
-      case "finished":
+      case "Selesai":
         return `bg-gray-100 border-2 ${
           priorityColors[meeting?.priority]
         } text-gray-600`;
@@ -1234,8 +1630,32 @@ const KaiRoomsApp = () => {
   const isInsideAnyMeeting = (dt, intervals) =>
     intervals.some(({ start, end }) => dt >= start && dt < end);
 
-  const getAvailableStartSlots = ({ selectedDate, jenisRapat, room }) => {
+  const normalizeMeeting = (meeting) => {
+    if (!meeting) return null;
+
+    const start = new Date(meeting.startTime);
+    const end = new Date(meeting.endTime);
+
+    const pad = (n) => String(n).padStart(2, "0");
+
+    return {
+      ...meeting,
+      startTimeHHMM: `${pad(start.getHours())}:${pad(start.getMinutes())}`,
+      endTimeHHMM: `${pad(end.getHours())}:${pad(end.getMinutes())}`,
+    };
+  };
+
+  const getAvailableStartSlots = ({
+    selectedDate,
+    jenisRapat,
+    room,
+    typePopUpBook, // "room" | "meeting" | "edit meeting"
+    currentMeeting, // { startTime, endTime } kalau edit
+  }) => {
+    console.log("ini current meeting", currentMeeting);
     const candidates = buildDaySlots(STEP_MIN, { excludeEnd: true });
+
+    // kalau online → gak ada blocking
     const intervals =
       jenisRapat === "Online"
         ? []
@@ -1243,16 +1663,40 @@ const KaiRoomsApp = () => {
 
     return candidates.filter((hhmm) => {
       const dt = hhmmToDate(selectedDate, hhmm);
-      if (isPastHHMM(selectedDate, hhmm)) return false;
+
+      // skip masa lalu (kecuali itu startTime lama)
+      if (
+        isPastHHMM(selectedDate, hhmm) &&
+        !(
+          typePopUpBook === "edit meeting" && currentMeeting?.startTime === hhmm
+        )
+      ) {
+        return false;
+      }
+
+      // kalau edit → biarkan slot start lama tetap ada
+      if (
+        typePopUpBook === "edit meeting" &&
+        currentMeeting?.startTimeHHMM === hhmm
+      ) {
+        return true;
+      }
+
+      // cek tabrakan meeting lain
       if (isInsideAnyMeeting(dt, intervals)) return false;
+
       return true;
     });
   };
 
-  const getAvailableEndSlots = ({ selectedDate, startHHMM, room } = {}) => {
+  const getAvailableEndSlots = ({
+    selectedDate,
+    startHHMM,
+    room,
+    currentMeeting, // { startTimeHHMM, endTimeHHMM }
+  } = {}) => {
     if (!startHHMM || !selectedDate) return [];
 
-    // pakai array yg sama
     const allSlots = buildDaySlots(STEP_MIN);
     const startIdx = allSlots.indexOf(startHHMM);
     if (startIdx === -1) return [];
@@ -1260,15 +1704,13 @@ const KaiRoomsApp = () => {
     const availableSlots = [];
 
     for (let endIdx = startIdx + 1; endIdx < allSlots.length; endIdx++) {
-      const startTimeStr = allSlots[startIdx];
       const endTimeStr = allSlots[endIdx];
 
-      const [sH, sM] = startTimeStr.split(":").map(Number);
+      const [sH, sM] = startHHMM.split(":").map(Number);
       const [eH, eM] = endTimeStr.split(":").map(Number);
 
       const bookingStart = new Date(selectedDate);
       bookingStart.setHours(sH, sM, 0, 0);
-
       const bookingEnd = new Date(selectedDate);
       bookingEnd.setHours(eH, eM, 0, 0);
 
@@ -1279,17 +1721,48 @@ const KaiRoomsApp = () => {
 
           const mStart = new Date(selectedDate);
           mStart.setHours(mSH, mSM, 0, 0);
-
           const mEnd = new Date(selectedDate);
           mEnd.setHours(mEH, mEM, 0, 0);
 
-          // overlap check
+          // kalau edit → skip conflict dari meeting ini sendiri
+          if (
+            typePopUpBook === "edit meeting" &&
+            currentMeeting?.startTimeHHMM === mStartStr &&
+            currentMeeting?.endTimeHHMM === meeting.endTime.slice(0, 5) // hh:mm
+          ) {
+            return false;
+          }
+
           return bookingStart < mEnd && bookingEnd > mStart;
         }
       );
 
-      if (hasConflict) break;
-      availableSlots.push(endTimeStr);
+      if (typePopUpBook === "edit meeting") {
+        // Pastikan endTime lama selalu masuk
+        if (endTimeStr === currentMeeting?.endTimeHHMM) {
+          availableSlots.push(endTimeStr);
+          continue;
+        }
+
+        // Kalau sudah melewati end lama → stop
+        if (
+          currentMeeting?.endTimeHHMM &&
+          endTimeStr > currentMeeting.endTimeHHMM
+        ) {
+          break;
+        }
+
+        // Kalau ada conflict, skip aja slot ini tapi jangan break
+        if (hasConflict) {
+          continue;
+        }
+
+        availableSlots.push(endTimeStr);
+      } else {
+        // Mode add biasa
+        if (hasConflict) break;
+        availableSlots.push(endTimeStr);
+      }
     }
 
     return availableSlots;
@@ -1332,6 +1805,14 @@ const KaiRoomsApp = () => {
     };
     console.log(timeSlots);
 
+    function formatTime(d, isEnd = false) {
+      let hh = d.getHours();
+      let mm = d.getMinutes();
+      // kalau end time dan tepat 00:00, ubah ke 24:00
+      if (isEnd && hh === 0 && mm === 0) return "24:00";
+      return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+    }
+
     for (const { start: slotStart, end: slotEnd } of timeSlots) {
       console.log(slotStart, slotEnd);
       let slotStartDate = makeDate(slotStart);
@@ -1355,7 +1836,6 @@ const KaiRoomsApp = () => {
       }
 
       // Potong oleh quarter sekarang hanya kalau tanggal = hari ini
-      // Potong oleh quarter sekarang hanya kalau selectedDate = hari ini
       if (isToday) {
         const quarterStart = new Date(now);
         quarterStart.setMinutes(Math.floor(now.getMinutes() / 15) * 15, 0, 0);
@@ -1381,31 +1861,287 @@ const KaiRoomsApp = () => {
             const mStart = makeDate(meeting.startTime);
             const mEnd = makeDate(meeting.endTime);
             if (mEnd <= mStart) mEnd.setDate(mEnd.getDate() + 1);
-            return mStart < subEnd && mEnd > subStart;
+            return mStart < subEnd && mEnd > subStart; // ada overlap
           }
         );
 
-        const keyUnique = `${subStart.toTimeString().slice(0, 5)}-${subEnd
-          .toTimeString()
-          .slice(0, 5)}-${overlappedMeeting?.id || "free"}`;
+        // pakai formatTime untuk normalisasi (24:00 bukan 00:00)
+        const startStr = formatTime(subStart);
+        let endStr = formatTime(subEnd);
+
+        // tambahan safeguard: kalau ini slot terakhir dan "00:00", tampilkan 24:00
+        if (endStr === "00:00" && slotEnd === "24:00") {
+          endStr = "24:00";
+        }
+
+        const keyUnique = startStr;
 
         if (!seen.has(keyUnique)) {
           seen.add(keyUnique);
 
           refinedSlots.push({
-            start: subStart.toTimeString().slice(0, 5),
-            end: subEnd.toTimeString().slice(0, 5),
-            label: `${subStart.toTimeString().slice(0, 5)}-${subEnd
-              .toTimeString()
-              .slice(0, 5)}`,
-            key: subStart.toTimeString().slice(0, 5),
+            start: startStr,
+            end: endStr,
+            label: `${startStr}-${endStr}`,
+            key: keyUnique,
             meetingId: overlappedMeeting?.id || null,
           });
         }
       }
     }
 
+    console.log("ini todat", dataRoomsToday, refinedSlots);
     return refinedSlots;
+  }
+
+  const isFormValid = (formData) => {
+    console.log("ini form data", formData);
+
+    // Field wajib dasar
+    if (
+      !formData.penyelenggara ||
+      !formData.namaRapat ||
+      !formData.tanggal ||
+      !formData.waktuMulai
+    ) {
+      return false;
+    }
+
+    // Validasi waktuSelesai - tidak wajib jika Online dan mulaiSekarang = true
+    if (formData.jenisRapat === "Online" && formData.mulaiSekarang === true) {
+      // Untuk online mulai sekarang, waktuSelesai tidak wajib
+    } else {
+      // Untuk semua kondisi lainnya, waktuSelesai wajib
+      if (!formData.waktuSelesai) {
+        return false;
+      }
+    }
+
+    // Validasi ruangan - tidak wajib jika Online (baik mulai sekarang maupun pilih jadwal)
+    if (formData.jenisRapat === "Online") {
+      // Untuk online, ruangan tidak wajib
+    } else {
+      // Untuk offline dan hybrid, ruangan wajib
+      if (!formData.ruangan) {
+        return false;
+      }
+    }
+
+    // Kalau online / hybrid wajib ada link
+    if (
+      (formData.jenisRapat === "Online" || formData.jenisRapat === "Hybrid") &&
+      !formData.linkMeet
+    ) {
+      return false;
+    }
+
+    // kirimUndanganEmail minimal tidak undefined
+    if (formData.kirimUndanganEmail === undefined) {
+      return false;
+    }
+
+    return true; // valid
+  };
+
+  function splitMeetingToFitGrid(
+    meeting,
+    gridCols,
+    startIndex,
+    slotDuration = 60, // Default 1 slot = 1 jam
+    selectedDate = new Date()
+  ) {
+    const spans = [];
+
+    let start = parseHHMM(meeting.startTime, selectedDate);
+    let end = parseHHMM(meeting.endTime, selectedDate);
+
+    const isEndAtMidnight = meeting.endTime === "00:00";
+    if (isEndAtMidnight) end.setDate(end.getDate() + 1);
+
+    // PERBAIKAN: Hitung total slots berdasarkan hour boundaries
+    const totalSlotsFromBoundaries = calculateHourBasedSlots(start, end);
+
+    let totalMinutes = (end - start) / 60000;
+    let currentStart = new Date(start);
+    let currentIndex = startIndex;
+    let partIndex = 0;
+    let remainingSlots = totalSlotsFromBoundaries;
+
+    const startCol = startIndex % gridCols;
+    const remainingSlotsInStartRow = gridCols - startCol;
+
+    const willBeSplit = totalSlotsFromBoundaries > remainingSlotsInStartRow;
+
+    while (remainingSlots > 0) {
+      const currentCol = currentIndex % gridCols;
+      const remainingSlotsInRow = gridCols - currentCol;
+
+      // Gunakan remaining slots
+      const actualSlotsUsed = Math.min(remainingSlots, remainingSlotsInRow);
+      const spanMinutes = actualSlotsUsed * 60; // Asumsi 1 slot = 1 jam untuk span
+
+      // Handle end time dengan akurat
+      let currentEnd;
+      if (remainingSlots === actualSlotsUsed) {
+        // Ini span terakhir, gunakan end time asli meeting
+        currentEnd = new Date(end);
+      } else {
+        // Bukan span terakhir, hitung berdasarkan span minutes
+        currentEnd = new Date(currentStart);
+        currentEnd.setMinutes(currentStart.getMinutes() + spanMinutes);
+      }
+
+      // Format display time
+      const formatDisplayTime = (date) => {
+        let hours = date.getHours();
+        let minutes = date.getMinutes();
+        if (isEndAtMidnight && hours === 0 && minutes === 0) return "24:00";
+        return `${hours.toString().padStart(2, "0")}:${minutes
+          .toString()
+          .padStart(2, "0")}`;
+      };
+
+      spans.push({
+        ...meeting,
+        startTime: formatDisplayTime(currentStart),
+        endTime: formatDisplayTime(currentEnd),
+        colSpan: actualSlotsUsed,
+        partIndex,
+        isFirstPart: partIndex === 0,
+        isLastPart: remainingSlots - actualSlotsUsed <= 0,
+        isSplit: willBeSplit,
+        gridPosition: {
+          startCol: currentCol,
+          endCol: currentCol + actualSlotsUsed - 1,
+          row: Math.floor(currentIndex / gridCols),
+        },
+        // DEBUG INFO
+        _debug: {
+          totalSlotsCalculated: totalSlotsFromBoundaries,
+          remainingSlots: remainingSlots,
+          actualSlotsUsed: actualSlotsUsed,
+          spanMinutes: spanMinutes,
+          boundaryDetails: getHourBoundarySegments(start, end),
+        },
+      });
+
+      remainingSlots -= actualSlotsUsed;
+      totalMinutes -= spanMinutes;
+      currentStart = new Date(currentEnd);
+      currentIndex += actualSlotsUsed;
+      partIndex++;
+
+      // Safety check
+      if (partIndex > 50) break;
+    }
+
+    return spans;
+  }
+
+  // HELPER: Hitung slots berdasarkan logika Anda
+  function calculateHourBasedSlots(start, end) {
+    // Hitung total durasi dalam menit
+    const totalMinutes = (end - start) / 60000;
+
+    // Ambil menit dari start dan end
+    const startMinutes = start.getMinutes();
+    const endMinutes = end.getMinutes();
+
+    // Hitung segments berdasarkan hour boundaries
+    const segments = getHourBoundarySegments(start, end);
+
+    console.log(
+      `\n=== CALCULATING SLOTS FOR ${formatTime(start)}-${formatTime(end)} ===`
+    );
+    console.log(`Total duration: ${totalMinutes} minutes`);
+    console.log(`Start minutes: ${startMinutes}, End minutes: ${endMinutes}`);
+    console.log(`Segments found: ${segments.length}`);
+
+    // Setiap segment adalah 1 unit dalam grid
+    return segments.length;
+  }
+
+  function getHourBoundarySegments(start, end) {
+    let currentStart = new Date(start);
+    const segments = [];
+
+    while (currentStart < end) {
+      // Tentukan end untuk segment ini
+      let segmentEnd = getNextHourBoundary(currentStart);
+      if (segmentEnd > end) {
+        segmentEnd = new Date(end);
+      }
+
+      const segmentMinutes = (segmentEnd - currentStart) / 60000;
+
+      segments.push({
+        start: formatTime(currentStart),
+        end: formatTime(segmentEnd),
+        minutes: segmentMinutes,
+        isFullHour: segmentMinutes === 60,
+      });
+
+      currentStart = new Date(segmentEnd);
+    }
+
+    console.log("Segments breakdown:");
+    segments.forEach((seg, index) => {
+      console.log(
+        `  ${index + 1}. ${seg.start}-${seg.end} = ${seg.minutes}min ${
+          seg.isFullHour ? "(FULL HOUR)" : "(PARTIAL)"
+        }`
+      );
+    });
+
+    return segments;
+  }
+
+  function getNextHourBoundary(date) {
+    const next = new Date(date);
+    next.setHours(next.getHours() + 1);
+    next.setMinutes(0);
+    next.setSeconds(0);
+    next.setMilliseconds(0);
+    return next;
+  }
+
+  // Fungsi tambahan untuk validasi grid consistency
+  function validateGridConsistency(timeSlots, gridCols) {
+    let currentRow = 0;
+    let slotsInCurrentRow = 0;
+
+    for (let i = 0; i < timeSlots.length; i++) {
+      const slot = timeSlots[i];
+      const colSpan = slot.colSpan || 1;
+
+      // Hitung slot di row saat ini
+      slotsInCurrentRow += colSpan;
+
+      // Cek apakah melebihi gridCols
+      if (slotsInCurrentRow > gridCols) {
+        console.error(
+          `Row ${currentRow} has ${slotsInCurrentRow} slots, exceeds ${gridCols}!`
+        );
+        console.error(`Problem at slot ${i}:`, slot);
+        return false;
+      }
+
+      // Jika row penuh, reset counter
+      if (slotsInCurrentRow === gridCols) {
+        console.log(
+          `Row ${currentRow}: Complete with ${slotsInCurrentRow} slots`
+        );
+        currentRow++;
+        slotsInCurrentRow = 0;
+      }
+    }
+
+    // Cek row terakhir
+    if (slotsInCurrentRow > 0) {
+      console.log(`Last row ${currentRow}: ${slotsInCurrentRow} slots`);
+    }
+
+    return true;
   }
 
   return (
@@ -1470,6 +2206,11 @@ const KaiRoomsApp = () => {
                 icon: Settings,
                 label: "Pengaturan & Profil",
                 href: "/pengaturan",
+              },
+              {
+                icon: HelpCircle,
+                label: "Bantuan",
+                href: "/bantuan",
               },
             ].map((item, index) => (
               <li key={index} className="relative">
@@ -1584,7 +2325,9 @@ const KaiRoomsApp = () => {
           </div>
         </header>
 
-        {selectedMeeting ? (
+        {selectedMeeting &&
+        typePopUpBook !== "edit meeting" &&
+        typePopUpBook !== "delete meeting" ? (
           <div className="">
             {/* Header with Back Button */}
 
@@ -1621,13 +2364,23 @@ const KaiRoomsApp = () => {
                         }
                       )}{" "}
                       -{" "}
-                      {new Date(selectedMeeting?.endTime).toLocaleTimeString(
-                        "id-ID",
-                        {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        }
-                      )}
+                      {selectedMeeting?.endTime
+                        ? (() => {
+                            const date = new Date(selectedMeeting.endTime);
+                            const hours = date.getHours();
+                            const minutes = date.getMinutes();
+
+                            // kalau jam & menit = 00:00, jadikan 24:00
+                            if (hours === 0 && minutes === 0) {
+                              return "24:00";
+                            }
+
+                            return date.toLocaleTimeString("id-ID", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            });
+                          })()
+                        : "selesai"}
                     </span>
                   </div>
                 </div>
@@ -1906,10 +2659,17 @@ const KaiRoomsApp = () => {
                       <div className="flex items-center space-x-2">
                         <Timer className="text-blue-200" size={16} />
                         <span>
-                          {nearestMeeting.tanggal} {nearestMeeting.time} -{" "}
-                          {nearestMeeting.endTime} WIB
+                          {nearestMeeting.tanggal}{" "}
+                          {`${nearestMeeting.time} ${
+                            nearestMeeting.endTime ? `` : "WIB"
+                          }`}{" "}
+                          -{" "}
+                          {nearestMeeting.endTime
+                            ? `${nearestMeeting.endTime} WIB`
+                            : "selesai"}
                         </span>
                       </div>
+
                       {nearestMeeting.ruangan && (
                         <div className="flex items-center space-x-2 text-sm">
                           <Building className="text-white/80" size={16} />
@@ -1985,19 +2745,19 @@ const KaiRoomsApp = () => {
                             const timeSlotKey = `${currentHour}:00`;
                             if (room.meetings[timeSlotKey]) {
                               const meeting = room.meetings[timeSlotKey];
-                              if (meeting.status === "berlangsung")
-                                return "occupied";
-                              if (meeting.status === "mendatang")
-                                return "upcoming";
+                              if (meeting.status === "Berlangsung")
+                                return "Berlangsung";
+                              if (meeting.status === "Mendatang")
+                                return "Akan Datang";
                             }
-                            return "available";
+                            return "Tersedia";
                           };
 
                           const getCurrentActivity = (room) => {
                             for (const [timeKey, meeting] of Object.entries(
                               room.meetings || {}
                             )) {
-                              if (meeting.status === "berlangsung")
+                              if (meeting.status === "Berlangsung")
                                 return meeting;
                             }
                             return null;
@@ -2066,7 +2826,7 @@ const KaiRoomsApp = () => {
                           return (
                             <div
                               key={room.id}
-                              className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow"
+                              className="bg-white border border-gray-200 rounded-lg px-4 py-5 hover:shadow-md transition-shadow"
                             >
                               {/* Compact Header */}
                               <div className="flex items-center justify-between mb-3">
@@ -2140,28 +2900,69 @@ const KaiRoomsApp = () => {
                               )}
 
                               {/* Ultra Compact Time Slots Grid */}
-                              <div className="grid grid-cols-9 gap-1 mt-2">
-                                {splitSlotsByMeetings(timeSlots, room).map(
-                                  (timeSlot, index) => {
+                              <div className="grid grid-cols-8 gap-[6px] mt-2">
+                                {splitSlotsByMeetings(timeSlots, room)
+                                  .flatMap((timeSlot, index) => {
                                     const meeting = room.meetings[timeSlot.key];
+                                    console.log("ini meeting", meeting);
                                     const isSpanned = isSlotSpanned(
                                       room,
                                       timeSlot.key
                                     );
+                                    if (isSpanned) return [];
 
+                                    const slotStart = new Date(
+                                      `1970-01-01T${timeSlot.start}:00`
+                                    );
+                                    const slotEnd = new Date(
+                                      `1970-01-01T${timeSlot.end}:00`
+                                    );
+                                    const slotDuration =
+                                      (slotEnd.getTime() -
+                                        slotStart.getTime()) /
+                                      (1000 * 60); // menit
+
+                                    if (meeting) {
+                                      return splitMeetingToFitGrid(
+                                        meeting,
+                                        8,
+                                        index,
+                                        slotDuration
+                                      ).map((part, idx) => ({
+                                        ...timeSlot,
+                                        meeting: part,
+                                        colSpan: part.colSpan,
+                                        label: `${part.startTime}-${part.endTime}`,
+                                        isFirstPart: part.isFirstPart,
+                                        isLastPart: part.isLastPart,
+                                      }));
+                                    }
+
+                                    return [
+                                      {
+                                        ...timeSlot,
+                                        meeting: null,
+                                        colSpan: 1,
+                                      },
+                                    ];
+                                  })
+                                  .map((slot, idx) => {
+                                    const meeting = slot.meeting;
+
+                                    const isSpanned = isSlotSpanned(
+                                      room,
+                                      slot.key
+                                    );
                                     if (isSpanned) return null;
 
                                     const status = meeting
-                                      ? getSlotStatus(room, timeSlot.key)
+                                      ? getSlotStatus(room, slot.key)
                                       : "available";
-                                    const colSpan = meeting
-                                      ? getSlotSpan(meeting)
-                                      : 1;
                                     const now = new Date();
                                     const selectedDate = new Date(); // atau tanggal yang dipilih user
 
-                                    // Ambil jam dan menit dari timeSlot.key (format "HH:mm")
-                                    const [slotHour, slotMinute] = timeSlot.key
+                                    // Ambil jam dan menit dari slot.key (format "HH:mm")
+                                    const [slotHour, slotMinute] = slot.key
                                       .split(":")
                                       .map(Number);
 
@@ -2183,8 +2984,8 @@ const KaiRoomsApp = () => {
                                       return d;
                                     };
 
-                                    let slotStart = parseHHMM(timeSlot.start);
-                                    let slotEnd = parseHHMM(timeSlot.end);
+                                    let slotStart = parseHHMM(slot.start);
+                                    let slotEnd = parseHHMM(slot.end);
                                     if (slotEnd <= slotStart)
                                       slotEnd.setDate(slotEnd.getDate() + 1);
 
@@ -2195,39 +2996,53 @@ const KaiRoomsApp = () => {
                                     const isDisabled =
                                       (isPastTime && !meeting) ||
                                       (isCurrentTime && !meeting);
-
                                     const isUnavailable =
                                       isPastTime || isCurrentTime;
 
                                     return (
                                       <button
-                                        key={timeSlot.key}
+                                        key={idx}
                                         onClick={() =>
-                                          handleSlotClick(room, timeSlot)
+                                          handleSlotClick(room, slot)
                                         }
                                         disabled={isUnavailable && !meeting}
                                         className={`
-    group relative p-1.5 rounded text-xs transition-all cursor-pointer min-h-[50px] border
+    group relative p-2 rounded text-xs transition-all 
+    h-[80px] border flex flex-col justify-center items-center
     ${getSlotColor(status, meeting)}
-    ${isCurrentTime ? "ring-1 ring-blue-500" : ""}
+    ${isCurrentTime ? "ring-2 ring-blue-500" : ""}
     ${
       isPastTime && !meeting
         ? "opacity-40 cursor-not-allowed"
-        : "hover:shadow-sm"
+        : "hover:shadow-sm hover:scale-[1.02] cursor-pointer"
+    }
+    ${
+      meeting && meeting.isSplit
+        ? meeting.isFirstPart
+          ? "border-r-0 rounded-r-none"
+          : meeting.isLastPart
+          ? "border-l-0 rounded-l-none"
+          : "border-l-0 border-r-0 rounded-none"
+        : ""
     }
   `}
                                         style={
-                                          colSpan > 1
-                                            ? { gridColumn: `span ${colSpan}` }
+                                          slot.colSpan > 1
+                                            ? {
+                                                gridColumn: `span ${slot.colSpan}`,
+                                              }
                                             : {}
                                         }
                                       >
                                         {/* Tooltip on hover */}
-
-                                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 border border-white/10 backdrop-blur-md bg-white/10 opacity-0 text-black text-[10px] rounded shadow group-hover:opacity-100 transition-opacity z-10">
+                                        <div
+                                          className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 
+                  bg-gray-900 text-white text-[10px] rounded shadow-lg
+                  opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none"
+                                        >
                                           {meeting
                                             ? isPastTime
-                                              ? "Meeting Telah Lewat"
+                                              ? "Lihat Detail Meeting Yang Telah Lewat"
                                               : "Lihat Detail Meeting"
                                             : isUnavailable
                                             ? "Telah Lewat"
@@ -2236,71 +3051,50 @@ const KaiRoomsApp = () => {
 
                                         {/* Current Time Indicator */}
                                         {isCurrentTime && (
-                                          <div className="absolute -top-0.5 left-1/2 transform -translate-x-1/2">
-                                            <div className="bg-blue-500 text-white text-[6px] px-0.5 py-0.5 rounded-full font-bold">
+                                          <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 z-10">
+                                            <div className="bg-blue-500 text-white text-[8px] px-1 py-0.5 rounded-full font-bold shadow">
                                               Sekarang
                                             </div>
                                           </div>
                                         )}
 
-                                        <div className="text-center">
-                                          <div className="font-mono text-[10px] mb-1 font-semibold">
-                                            {meeting && colSpan > 1
-                                              ? `${timeSlot.start}-${meeting.endTime}`
-                                              : timeSlot.label}
-                                          </div>
-
-                                          {meeting ? (
-                                            <div className="space-y-0.5">
-                                              <div className="font-medium text-[10px] leading-tight truncate">
-                                                {meeting.title}
-                                              </div>
-                                              <div className="text-[8px] flex justify-center opacity-75">
-                                                {meeting.participants}
-                                                <Users size={10} />
-                                              </div>
-
-                                              <div className="text-[8px] opacity-50">
-                                                {formatDuration(
-                                                  meeting.duration
-                                                )}
-                                              </div>
-                                            </div>
-                                          ) : (
-                                            <div className="text-gray-400 text-[10px]">
-                                              {isUnavailable
-                                                ? "Telah Lewat"
-                                                : "Tersedia"}
-                                            </div>
-                                          )}
+                                        {/* Time Display */}
+                                        <div className="font-mono text-[10px] font-semibold text-center mb-1">
+                                          {meeting
+                                            ? `${meeting.startTime}-${meeting.endTime}`
+                                            : slot.label}
                                         </div>
 
-                                        {/* Priority dot */}
-                                        {meeting && meeting.priority && (
-                                          <div
-                                            className={`absolute top-1 right-1 w-1 h-1 rounded-full ${
-                                              meeting.priority === "high"
-                                                ? "bg-red-500"
-                                                : meeting.priority === "medium"
-                                                ? "bg-yellow-500"
-                                                : "bg-green-500"
-                                            }`}
-                                          />
-                                        )}
-
-                                        {/* Duration bar */}
-                                        {meeting && colSpan > 1 && (
-                                          <div className="absolute bottom-0.5 left-0.5 right-0.5 h-0.5 bg-black bg-opacity-20 rounded-full">
-                                            <div
-                                              className="h-full bg-white bg-opacity-50 rounded-full"
-                                              style={{ width: "100%" }}
-                                            ></div>
+                                        {/* Content */}
+                                        {meeting ? (
+                                          <div className="flex-1 flex flex-col justify-center items-center space-y-0.5 min-w-0">
+                                            <div className="font-medium text-[10px] leading-tight text-center truncate w-full px-1">
+                                              {meeting.title}
+                                            </div>
+                                            <div className="text-[8px] flex items-center gap-1 opacity-75">
+                                              <span>
+                                                {meeting.participants}
+                                              </span>
+                                              <Users size={8} />
+                                            </div>
+                                            <div className="text-[8px] opacity-60">
+                                              {formatDuration(meeting.duration)}
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <div className="text-[10px] opacity-60 text-center">
+                                            {isUnavailable
+                                              ? "Telah Lewat"
+                                              : "Tersedia"}
                                           </div>
                                         )}
+
+                                        {/* Priority dot */}
+
+                                        {/* Duration bar */}
                                       </button>
                                     );
-                                  }
-                                )}
+                                  })}
                               </div>
                             </div>
                           );
@@ -2345,15 +3139,36 @@ const KaiRoomsApp = () => {
                               <h4 className="text-sm font-semibold text-gray-800 truncate pr-2">
                                 {meeting.title}
                               </h4>
-                              <div className="flex items-center space-x-4 flex-shrink-0">
-                                {/* Eye Icon Button */}
+
+                              <div className="flex items-center space-x-2 flex-shrink-0">
+                                {/* Icon Detail */}
                                 <button
                                   onClick={() => handleShowDetail(meeting)}
-                                  className="bg-[#1b68b0]/10 hover:bg-[#1b68b0] hover:text-white text-[#1b68b0] text-[11px] px-3 py-1 rounded-full font-medium transition-colors flex items-center space-x-1.5 cursor-pointer"
+                                  className="p-1.5 rounded-full cursor-pointer hover:bg-blue-100 text-blue-600 hover:text-blue-700 transition-colors"
                                 >
-                                  <Info size={10} />
-                                  <span>Detail</span>
+                                  <Info size={16} />
                                 </button>
+
+                                {/* Kalau meeting ini dibuat oleh user yang login, tampilkan Edit & Delete */}
+                                {meeting.createdById === userData?.id && (
+                                  <>
+                                    {/* <button
+                                      onClick={() => {
+                                        handleShowEdit(meeting);
+                                      }}
+                                      className="p-1.5 rounded-full cursor-pointer hover:bg-yellow-100 text-yellow-600 hover:text-yellow-700 transition-colors"
+                                    >
+                                      <Edit size={16} />
+                                    </button> */}
+
+                                    <button
+                                      onClick={() => handleShowDelete(meeting)}
+                                      className="p-1.5 rounded-full cursor-pointer hover:bg-red-100 text-red-600 hover:text-red-700 transition-colors"
+                                    >
+                                      <Trash size={16} />
+                                    </button>
+                                  </>
+                                )}
 
                                 {/* Status Badge */}
                                 <div className="bg-[#d7ebff] text-[#2a75f3] text-[11px] px-2 py-1 rounded-full font-medium whitespace-nowrap">
@@ -2375,7 +3190,15 @@ const KaiRoomsApp = () => {
 
                               <div className="flex items-center">
                                 <span className="text-sm text-[#2a75f3] font-semibold">
-                                  {meeting.time} - {meeting.endTime}
+                                  {`${meeting.time} ${
+                                    !meeting.endTime ? "WIB" : ""
+                                  }`}{" "}
+                                  -{" "}
+                                  {meeting.endTime
+                                    ? meeting.endTime === "00:00"
+                                      ? "24:00 WIB"
+                                      : `${meeting.endTime} WIB`
+                                    : "selesai"}
                                 </span>
                               </div>
                             </div>
@@ -2427,19 +3250,29 @@ const KaiRoomsApp = () => {
             onClick={closeModalBook}
           ></div>
 
-          <div className="relative bg-white rounded-2xl shadow-2xl px-8 py-6 w-full max-w-4xl h-[90vh] flex flex-col">
+          <div
+            className={`relative bg-white rounded-2xl shadow-2xl px-8 py-6 w-full max-w-4xl flex flex-col ${
+              typePopUpBook === "delete meeting" ? "" : "h-[90vh]"
+            }`}
+          >
             {/* Header - Fixed */}
             <div className="flex-shrink-0">
               <div className="flex justify-between cursor-pointer items-center border-b border-gray-100 pb-2">
                 <h2 className="text-xl font-bold text-gray-900">
                   {typePopUpBook === "room"
                     ? "Booking Ruangan"
-                    : "Buat Meeting"}
+                    : typePopUpBook === "meeting"
+                    ? "Buat Meeting"
+                    : typePopUpBook === "edit meeting"
+                    ? "Edit Meeting"
+                    : typePopUpBook === "delete meeting"
+                    ? "Delete Meeting"
+                    : ""}
                 </h2>
 
                 <button
                   onClick={closeModalBook}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-2 hover:bg-gray-100 cursor-pointer rounded-lg transition-colors"
                 >
                   <X size={20} />
                 </button>
@@ -2449,615 +3282,924 @@ const KaiRoomsApp = () => {
             {/* Content - Scrollable but optimized */}
             <div className="flex-1 min-h-0 pt-2">
               <div className="py-2 space-y-4 h-full overflow-y-auto">
-                {typePopUpBook === "meeting" && (
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Jenis Rapat *
-                      </label>
-                      <div className="flex space-x-4 mt-2">
-                        {[
-                          { value: "Offline", icon: Users, label: "Offline" },
-                          { value: "Hybrid", icon: Monitor, label: "Hybrid" },
-                          { value: "Online", icon: Video, label: "Online" },
-                        ]
-                          // Filter berdasarkan typePopUpBook
-                          .filter((option) => {
-                            if (typePopUpBook === "room") {
-                              return option.value !== "Online";
-                            }
-                            return true; // "meeting" boleh semua
-                          })
-                          .map((option) => (
-                            <label
-                              key={option.value}
-                              className="flex items-center space-x-1 cursor-pointer"
-                            >
-                              <input
-                                type="radio"
-                                name="jenisRapat"
-                                value={option.value}
-                                checked={
-                                  formDataBookingRoom.jenisRapat ===
-                                  option.value
-                                }
-                                onChange={handleChange}
-                                className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                              />
-                              <option.icon
-                                size={16}
-                                className="text-gray-600"
-                              />
-                              <span className="text-xs text-gray-700">
-                                {option.label}
-                              </span>
-                            </label>
-                          ))}
-                      </div>
-                    </div>
-                    {(formDataBookingRoom.jenisRapat === "Online" ||
-                      formDataBookingRoom.jenisRapat === "Hybrid") &&
-                      typePopUpBook === "meeting" && (
+                {typePopUpBook !== "delete meeting" ? (
+                  <>
+                    {typePopUpBook === "meeting" && (
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Link Meeting *
+                            Jenis Rapat *
                           </label>
-                          <input
-                            type="url"
-                            name="linkMeet"
-                            value={formDataBookingRoom.linkMeet}
-                            onChange={handleChange}
-                            className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="https://meet.google.com/..."
-                          />
-                        </div>
-                      )}
-                  </div>
-                )}
-                {/* Row 1: Basic Info */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                  <div className="lg:col-span-1">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Nama Rapat *
-                    </label>
-                    <input
-                      type="text"
-                      name="namaRapat"
-                      value={formDataBookingRoom.namaRapat}
-                      onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Masukkan nama rapat"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Penyelenggara *
-                    </label>
-                    <select
-                      name="penyelenggara"
-                      value={formDataBookingRoom.penyelenggara}
-                      onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option disabled value="">
-                        Pilih Unit
-                      </option>
-                      {unitOptions.map((data) => (
-                        <option key={data.id} value={data.id}>
-                          {data.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {formDataBookingRoom.jenisRapat !== "Online" && (
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Ruangan *
-                      </label>
-                      <select
-                        name="ruangan"
-                        value={formDataBookingRoom.ruangan}
-                        onChange={handleChange}
-                        className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="" disabled>
-                          Pilih Ruangan
-                        </option>
-                        {roomsOptions.map((data) => (
-                          <option key={data.id} value={data.id}>
-                            {data.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
-                <div className="lg:col-span-1">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Deskripsi Rapat
-                  </label>
-                  <textarea
-                    type="text"
-                    name="catatan"
-                    value={formDataBookingRoom.agendaRapat}
-                    onChange={handleChange}
-                    className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Masukkan deskripsi rapat"
-                  />
-                </div>
-
-                {/* Row 2: Date & Time */}
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Tanggal *
-                    </label>
-                    <input
-                      disabled={
-                        (formDataBookingRoom.jenisRapat === "Offline" ||
-                          formDataBookingRoom.jenisRapat === "Hybrid") &&
-                        formDataBookingRoom.ruangan === ""
-                      }
-                      type="date"
-                      name="tanggal"
-                      value={formDataBookingRoom.tanggal}
-                      onChange={(e) =>
-                        setFormDataBookingRoom((prev) => ({
-                          ...prev,
-                          tanggal: e.target.value,
-                          waktuMulai: "",
-                          waktuSelesai: "",
-                        }))
-                      }
-                      className={`w-full text-sm border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent 
-                        ${
-                          (formDataBookingRoom.jenisRapat === "Offline" ||
-                            formDataBookingRoom.jenisRapat === "Hybrid") &&
-                          formDataBookingRoom.ruangan === ""
-                            ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
-                            : "border-gray-300"
-                        }`}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Jam Mulai *
-                    </label>
-                    <select
-                      value={formDataBookingRoom.waktuMulai}
-                      onChange={(e) =>
-                        setFormDataBookingRoom((prev) => ({
-                          ...prev,
-                          waktuMulai: e.target.value,
-                          waktuSelesai: "",
-                        }))
-                      }
-                      disabled={
-                        formDataBookingRoom.tanggal === "" ||
-                        (formDataBookingRoom.jenisRapat !== "Online" &&
-                          formDataBookingRoom.ruangan === "")
-                      }
-                      className="w-full text-sm border rounded-lg p-2"
-                    >
-                      <option value="">Pilih Jam</option>
-                      {getAvailableStartSlots({
-                        selectedDate: new Date(formDataBookingRoom.tanggal),
-                        jenisRapat: formDataBookingRoom.jenisRapat,
-                        room: dataRoomsSelectedTanggal?.[0],
-                      }).map((slot) => (
-                        <option key={slot} value={slot}>
-                          {slot}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Jam Selesai *
-                    </label>
-                    {formDataBookingRoom.jenisRapat === "Online" ? (
-                      <select
-                        value={formDataBookingRoom.waktuSelesai}
-                        onChange={(e) =>
-                          setFormDataBookingRoom((prev) => ({
-                            ...prev,
-                            waktuSelesai: e.target.value,
-                          }))
-                        }
-                        disabled={
-                          formDataBookingRoom.waktuMulai === "" ||
-                          formDataBookingRoom.tanggal === ""
-                        }
-                        className={`w-full text-sm border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          formDataBookingRoom.waktuMulai === ""
-                            ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
-                            : "border-gray-300"
-                        }`}
-                      >
-                        <option value="">Pilih Jam</option>
-                        {getAvailableEndSlots({
-                          selectedDate: new Date(formDataBookingRoom.tanggal),
-                          startHHMM: formDataBookingRoom.waktuMulai,
-                          jenisRapat: formDataBookingRoom.jenisRapat,
-                        }).map((slot) => (
-                          <option key={slot} value={slot}>
-                            {slot}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <select
-                        value={formDataBookingRoom.waktuSelesai}
-                        onChange={(e) =>
-                          setFormDataBookingRoom((prev) => ({
-                            ...prev,
-                            waktuSelesai: e.target.value,
-                          }))
-                        }
-                        disabled={
-                          formDataBookingRoom.waktuMulai === "" ||
-                          formDataBookingRoom.tanggal === ""
-                        }
-                        className="w-full text-sm border rounded-lg p-2"
-                      >
-                        <option value="">Pilih Jam</option>
-                        {getAvailableEndSlots({
-                          selectedDate: new Date(formDataBookingRoom.tanggal),
-                          startHHMM: formDataBookingRoom.waktuMulai,
-                          jenisRapat: formDataBookingRoom.jenisRapat,
-                          room: dataRoomsSelectedTanggal?.[0],
-                        }).map((slot) => (
-                          <option key={slot} value={slot}>
-                            {slot}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                </div>
-
-                {/* Row 3: Time Slots Visualization */}
-                {formDataBookingRoom.jenisRapat !== "Online" &&
-                  formDataBookingRoom.tanggal !== "" && (
-                    <div className="grid grid-cols-9 gap-1 mt-2">
-                      {splitSlotsByMeetings(
-                        timeSlots,
-                        dataRoomsSelectedTanggal?.[0]
-                      ).map((timeSlot) => {
-                        const meeting =
-                          dataRoomsSelectedTanggal?.[0]?.meetings?.[
-                            timeSlot.key
-                          ];
-                        const isSpanned = isSlotSpanned(
-                          dataRoomsSelectedTanggal?.[0],
-                          timeSlot.key
-                        );
-
-                        if (isSpanned) return null;
-
-                        const status = meeting
-                          ? getSlotStatus(
-                              dataRoomsSelectedTanggal?.[0],
-                              timeSlot.key
-                            )
-                          : "available";
-                        const colSpan = meeting ? getSlotSpan(meeting) : 1;
-                        const now = new Date();
-                        const selectedDate = new Date(
-                          formDataBookingRoom.tanggal + "T00:00:00"
-                        );
-
-                        // Ambil jam dan menit dari timeSlot.key (format "HH:mm")
-                        const [slotHour, slotMinute] = timeSlot.key
-                          .split(":")
-                          .map(Number);
-
-                        // Gabungkan tanggal hari ini dengan jam slot
-                        const slotTime = new Date(selectedDate);
-                        slotTime.setHours(slotHour, slotMinute, 0, 0);
-
-                        const parseHHMM = (hhmm) => {
-                          const [h, m] = hhmm.split(":").map(Number);
-                          const d = new Date(selectedDate);
-                          d.setHours(h, m, 0, 0);
-                          return d;
-                        };
-
-                        let slotStart = parseHHMM(timeSlot.start);
-                        let slotEnd = parseHHMM(timeSlot.end);
-                        if (slotEnd <= slotStart)
-                          slotEnd.setDate(slotEnd.getDate() + 1);
-
-                        const isCurrentTime = now >= slotStart && now < slotEnd;
-                        const isPastTime = now >= slotEnd;
-
-                        const isDisabled =
-                          (isPastTime && !meeting) ||
-                          (isCurrentTime && !meeting);
-
-                        const isUnavailable = isPastTime || isCurrentTime;
-
-                        return (
-                          <div
-                            key={timeSlot.key}
-                            disabled={true}
-                            className={`
-    group relative p-1.5 rounded text-xs transition-all min-h-[50px] border
-    bg-gray-50 border-gray-200 ${getSlotColor(status, meeting)}
-    ${isCurrentTime ? "ring-1 ring-blue-500" : ""}
-    ${
-      isPastTime && !meeting
-        ? "opacity-40 cursor-not-allowed"
-        : "hover:shadow-sm"
-    }
-  `}
-                            style={
-                              colSpan > 1
-                                ? { gridColumn: `span ${colSpan}` }
-                                : {}
-                            }
-                          >
-                            {/* Tooltip on hover */}
-
-                            {/* Current Time Indicator */}
-                            {isCurrentTime && (
-                              <div className="absolute -top-0.5 left-1/2 transform -translate-x-1/2">
-                                <div className="bg-blue-500 text-white text-[6px] px-0.5 py-0.5 rounded-full font-bold">
-                                  Sekarang
-                                </div>
-                              </div>
-                            )}
-
-                            <div className="text-center">
-                              <div className="font-mono text-[10px] mb-1 font-semibold">
-                                {meeting && colSpan > 1
-                                  ? `${timeSlot.start}-${meeting.endTime}`
-                                  : timeSlot.label}
-                              </div>
-
-                              {meeting ? (
-                                <div className="space-y-0.5">
-                                  <div className="font-medium text-[10px] leading-tight truncate">
-                                    {meeting.title}
-                                  </div>
-                                  <div className="text-[8px] flex justify-center opacity-75">
-                                    {meeting.participants}
-                                    <Users size={10} />
-                                  </div>
-                                  <div className="text-[8px] opacity-50">
-                                    {formatDuration(meeting.duration)}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="text-gray-400 text-[10px]">
-                                  {isUnavailable ? "Telah Lewat" : "Tersedia"}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Priority dot */}
-                            {meeting && meeting.priority && (
-                              <div
-                                className={`absolute top-1 right-1 w-1 h-1 rounded-full ${
-                                  meeting.priority === "high"
-                                    ? "bg-red-500"
-                                    : meeting.priority === "medium"
-                                    ? "bg-yellow-500"
-                                    : "bg-green-500"
-                                }`}
-                              />
-                            )}
-
-                            {/* Duration bar */}
-                            {meeting && colSpan > 1 && (
-                              <div className="absolute bottom-0.5 left-0.5 right-0.5 h-0.5 bg-black bg-opacity-20 rounded-full">
-                                <div
-                                  className="h-full bg-white bg-opacity-50 rounded-full"
-                                  style={{ width: "100%" }}
-                                ></div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                {/* Row 4: Participants & Meeting Type */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Peserta Rapat *
-                    </label>
-                    <Select
-                      inputId="meeting-atendee"
-                      name="pesertaRapat"
-                      options={employeeOptions}
-                      value={(employeeOptions || [])
-                        .flatMap((group) => group.options || [])
-                        .filter((opt) =>
-                          formDataBookingRoom.pesertaRapat?.includes(opt.value)
-                        )}
-                      onChange={(selectedOptions) => {
-                        let newSelection = [...(selectedOptions || [])];
-
-                        // Cek apakah ada yang memilih "Semua Karyawan Unit ..."
-                        const allUnitSelected = newSelection.find((opt) =>
-                          opt.value.startsWith("unit_")
-                        );
-                        if (allUnitSelected) {
-                          const unitName = allUnitSelected.value.replace(
-                            "unit_",
-                            ""
-                          );
-
-                          // Cari semua pegawai dari unit itu
-                          const unitGroup = employeeOptions.find(
-                            (group) => group.label === unitName
-                          );
-                          if (unitGroup) {
-                            // Gabungkan semua pegawai unit itu ke dalam pilihan
-                            newSelection = [
-                              ...newSelection.filter(
-                                (opt) => !opt.value.startsWith("unit_")
-                              ), // hapus tag unit
-                              ...unitGroup.options.filter(
-                                (opt) => !opt.value.startsWith("unit_")
-                              ), // ambil semua pegawai unit
-                            ];
-
-                            // Hilangkan duplikat berdasarkan value
-                            const seen = new Set();
-                            newSelection = newSelection.filter((opt) => {
-                              if (seen.has(opt.value)) return false;
-                              seen.add(opt.value);
-                              return true;
-                            });
-                          }
-                        }
-
-                        setFormDataBookingRoom((prev) => ({
-                          ...prev,
-                          pesertaRapat: newSelection.map((opt) => opt.value),
-                        }));
-                      }}
-                      isMulti
-                      className="text-sm text-black"
-                      classNamePrefix="react-select"
-                      placeholder="Pilih Peserta..."
-                      isSearchable
-                      menuPlacement="auto"
-                      styles={{
-                        menuList: (base) => ({
-                          ...base,
-                          maxHeight: 200, // misalnya tinggi sekitar 5 item
-                          overflowY: "auto",
-                        }),
-                      }}
-                    />
-                  </div>
-
-                  {typePopUpBook === "room" && (
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Jenis Rapat *
-                      </label>
-                      <div className="flex space-x-4 mt-2">
-                        {[
-                          { value: "Offline", icon: Users, label: "Offline" },
-                          { value: "Online", icon: Video, label: "Online" },
-                          { value: "Hybrid", icon: Monitor, label: "Hybrid" },
-                        ]
-                          // Filter berdasarkan typePopUpBook
-                          .filter((option) => {
-                            if (typePopUpBook === "room") {
-                              return option.value !== "Online";
-                            }
-                            return true; // "meeting" boleh semua
-                          })
-                          .map((option) => (
-                            <label
-                              key={option.value}
-                              className="flex items-center space-x-1 cursor-pointer"
-                            >
-                              <input
-                                type="radio"
-                                name="jenisRapat"
-                                value={option.value}
-                                checked={
-                                  formDataBookingRoom.jenisRapat ===
-                                  option.value
+                          <div className="flex space-x-4 mt-2">
+                            {[
+                              {
+                                value: "Offline",
+                                icon: Users,
+                                label: "Offline",
+                              },
+                              {
+                                value: "Hybrid",
+                                icon: Monitor,
+                                label: "Hybrid",
+                              },
+                              { value: "Online", icon: Video, label: "Online" },
+                            ]
+                              // Filter berdasarkan typePopUpBook
+                              .filter((option) => {
+                                if (typePopUpBook === "room") {
+                                  return option.value !== "Online";
                                 }
+                                return true; // "meeting" boleh semua
+                              })
+                              .map((option) => (
+                                <label
+                                  key={option.value}
+                                  className="flex items-center space-x-1 cursor-pointer"
+                                >
+                                  <input
+                                    type="radio"
+                                    name="jenisRapat"
+                                    value={option.value}
+                                    checked={
+                                      formDataBookingRoom.jenisRapat ===
+                                      option.value
+                                    }
+                                    onChange={handleChange}
+                                    className="w-4 h-4 text-blue-600 cursor-pointer focus:ring-blue-500"
+                                  />
+                                  <option.icon
+                                    size={16}
+                                    className="text-gray-600"
+                                  />
+                                  <span className="text-xs text-gray-700">
+                                    {option.label}
+                                  </span>
+                                </label>
+                              ))}
+                          </div>
+                        </div>
+                        {(formDataBookingRoom.jenisRapat === "Online" ||
+                          formDataBookingRoom.jenisRapat === "Hybrid") &&
+                          typePopUpBook === "meeting" && (
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Link Meeting *
+                              </label>
+                              <input
+                                type="url"
+                                name="linkMeet"
+                                value={formDataBookingRoom.linkMeet}
                                 onChange={handleChange}
-                                className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                                className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="https://meet.google.com/..."
                               />
-                              <option.icon
-                                size={16}
-                                className="text-gray-600"
-                              />
-                              <span className="text-xs text-gray-700">
-                                {option.label}
-                              </span>
-                            </label>
-                          ))}
+                            </div>
+                          )}
                       </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Row 5: Meeting Link & Email Invitation */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                  {(formDataBookingRoom.jenisRapat === "Online" ||
-                    formDataBookingRoom.jenisRapat === "Hybrid") &&
-                    typePopUpBook === "room" && (
-                      <div>
+                    )}
+                    {typePopUpBook === "edit meeting" && (
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Jenis Rapat *
+                          </label>
+                          <div className="flex space-x-4 mt-2">
+                            {[
+                              {
+                                value: "Offline",
+                                icon: Users,
+                                label: "Offline",
+                              },
+                              {
+                                value: "Hybrid",
+                                icon: Monitor,
+                                label: "Hybrid",
+                              },
+                              { value: "Online", icon: Video, label: "Online" },
+                            ]
+                              // Filter berdasarkan typePopUpBook
+                              .filter((option) => {
+                                if (typePopUpBook === "room") {
+                                  return option.value !== "Online";
+                                }
+                                return true; // "meeting" boleh semua
+                              })
+                              .map((option) => (
+                                <label
+                                  key={option.value}
+                                  className="flex items-center space-x-1 cursor-pointer"
+                                >
+                                  <input
+                                    type="radio"
+                                    name="jenisRapat"
+                                    value={option.value}
+                                    checked={
+                                      formDataBookingRoom.jenisRapat ===
+                                      option.value
+                                    }
+                                    onChange={handleChange}
+                                    className="w-4 h-4 text-blue-600 cursor-pointer focus:ring-blue-500"
+                                  />
+                                  <option.icon
+                                    size={16}
+                                    className="text-gray-600"
+                                  />
+                                  <span className="text-xs text-gray-700">
+                                    {option.label}
+                                  </span>
+                                </label>
+                              ))}
+                          </div>
+                        </div>
+                        {(formDataBookingRoom.jenisRapat === "Online" ||
+                          formDataBookingRoom.jenisRapat === "Hybrid") &&
+                          typePopUpBook === "meeting" && (
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Link Meeting *
+                              </label>
+                              <input
+                                type="url"
+                                name="linkMeet"
+                                value={formDataBookingRoom.linkMeet}
+                                onChange={handleChange}
+                                className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="https://meet.google.com/..."
+                              />
+                            </div>
+                          )}
+                      </div>
+                    )}
+                    {/* Row 1: Basic Info */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                      <div className="lg:col-span-1">
                         <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Link Meeting *
+                          Nama Rapat *
                         </label>
                         <input
-                          type="url"
-                          name="linkMeet"
-                          value={formDataBookingRoom.linkMeet}
+                          type="text"
+                          name="namaRapat"
+                          value={formDataBookingRoom.namaRapat}
                           onChange={handleChange}
                           className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="https://meet.google.com/..."
+                          placeholder="Masukkan nama rapat"
                         />
                       </div>
-                    )}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Penyelenggara *
+                        </label>
+                        <select
+                          name="penyelenggara"
+                          value={formDataBookingRoom.penyelenggara}
+                          onChange={handleChange}
+                          className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option disabled value="">
+                            Pilih Unit
+                          </option>
+                          {unitOptions.map((data) => (
+                            <option key={data.id} value={data.id}>
+                              {data.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Kirim Undangan Meeting ke Email Peserta? *
-                    </label>
-                    <div className="flex items-center space-x-4 mt-2">
-                      <label className="flex items-center space-x-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="kirimUndanganEmail"
-                          value="true"
-                          checked={
-                            formDataBookingRoom.kirimUndanganEmail === true
-                          }
-                          onChange={() =>
-                            setFormDataBookingRoom((prev) => ({
-                              ...prev,
-                              kirimUndanganEmail: true,
-                            }))
-                          }
-                          className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-xs text-gray-700">Ya</span>
-                      </label>
-
-                      <label className="flex items-center space-x-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="kirimUndanganEmail"
-                          value="false"
-                          checked={
-                            formDataBookingRoom.kirimUndanganEmail === false
-                          }
-                          onChange={() =>
-                            setFormDataBookingRoom((prev) => ({
-                              ...prev,
-                              kirimUndanganEmail: false,
-                            }))
-                          }
-                          className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-xs text-gray-700">Tidak</span>
-                      </label>
+                      {formDataBookingRoom.jenisRapat !== "Online" && (
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Ruangan *
+                          </label>
+                          <select
+                            name="ruangan"
+                            value={formDataBookingRoom.ruangan}
+                            onChange={handleChange}
+                            className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="" disabled>
+                              Pilih Ruangan
+                            </option>
+                            {roomsOptions.map((data) => (
+                              <option key={data.id} value={data.id}>
+                                {data.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </div>
+                    <div className="lg:col-span-1">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Deskripsi Rapat
+                      </label>
+                      <textarea
+                        type="text"
+                        name="deskripsi"
+                        value={formDataBookingRoom.deskripsi}
+                        onChange={handleChange}
+                        className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Masukkan deskripsi rapat"
+                      />
+                    </div>
+                    <div className="lg:col-span-1">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Catatan
+                      </label>
+                      <textarea
+                        type="text"
+                        name="catatan"
+                        value={formDataBookingRoom.catatan}
+                        onChange={handleChange}
+                        className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Masukkan catatan rapat"
+                      />
+                    </div>
+
+                    {/* Row 2: Date & Time */}
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+                      {/* Checkbox untuk Online Meeting - Mulai Sekarang atau Pilih Jadwal */}
+                      {formDataBookingRoom.jenisRapat === "Online" && (
+                        <div className="lg:col-span-4 mb-3">
+                          <div className="flex items-center gap-4">
+                            <label className="flex items-center cursor-pointer">
+                              <input
+                                type="radio"
+                                name="onlineMeetingOption"
+                                value="mulaiSekarang"
+                                checked={
+                                  formDataBookingRoom.mulaiSekarang === true
+                                }
+                                onChange={(e) => {
+                                  const now = new Date();
+                                  const currentDate = now
+                                    .toISOString()
+                                    .split("T")[0]; // Format YYYY-MM-DD
+                                  const currentTime = now
+                                    .toTimeString()
+                                    .slice(0, 5); // Format HH:MM
+
+                                  setFormDataBookingRoom((prev) => ({
+                                    ...prev,
+                                    mulaiSekarang: true,
+                                    tanggal: currentDate,
+                                    waktuMulai: currentTime,
+                                    waktuSelesai: "",
+                                  }));
+                                }}
+                                className="mr-2"
+                              />
+                              <span className="text-sm font-medium text-gray-700">
+                                Mulai Sekarang
+                              </span>
+                            </label>
+                            <label className="flex items-center cursor-pointer">
+                              <input
+                                type="radio"
+                                name="onlineMeetingOption"
+                                value="pilihJadwal"
+                                checked={
+                                  formDataBookingRoom.mulaiSekarang === false
+                                }
+                                onChange={(e) =>
+                                  setFormDataBookingRoom((prev) => ({
+                                    ...prev,
+                                    mulaiSekarang: false,
+                                  }))
+                                }
+                                className="mr-2"
+                              />
+                              <span className="text-sm font-medium text-gray-700">
+                                Pilih Jadwal
+                              </span>
+                            </label>
+                          </div>
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Tanggal{" "}
+                          {formDataBookingRoom.jenisRapat === "Online" &&
+                          formDataBookingRoom.mulaiSekarang === true
+                            ? ""
+                            : "*"}
+                        </label>
+                        <input
+                          disabled={
+                            // Disabled jika Online dan pilih "Mulai Sekarang"
+                            (formDataBookingRoom.jenisRapat === "Online" &&
+                              formDataBookingRoom.mulaiSekarang === true) ||
+                            // Disabled jika Offline/Hybrid dan ruangan kosong
+                            ((formDataBookingRoom.jenisRapat === "Offline" ||
+                              formDataBookingRoom.jenisRapat === "Hybrid") &&
+                              formDataBookingRoom.ruangan === "")
+                          }
+                          type="date"
+                          name="tanggal"
+                          value={formDataBookingRoom.tanggal}
+                          onChange={(e) =>
+                            setFormDataBookingRoom((prev) => ({
+                              ...prev,
+                              tanggal: e.target.value,
+                              waktuMulai: "",
+                              waktuSelesai: "",
+                            }))
+                          }
+                          className={`w-full text-sm border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent 
+        ${
+          // Style untuk disabled
+          (formDataBookingRoom.jenisRapat === "Online" &&
+            formDataBookingRoom.mulaiSekarang === true) ||
+          ((formDataBookingRoom.jenisRapat === "Offline" ||
+            formDataBookingRoom.jenisRapat === "Hybrid") &&
+            formDataBookingRoom.ruangan === "")
+            ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
+            : "border-gray-300"
+        }`}
+                          placeholder={
+                            formDataBookingRoom.jenisRapat === "Online" &&
+                            formDataBookingRoom.mulaiSekarang === true
+                              ? "Tanggal saat ini"
+                              : ""
+                          }
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Jam Mulai{" "}
+                          {formDataBookingRoom.jenisRapat === "Online" &&
+                          formDataBookingRoom.mulaiSekarang === true
+                            ? ""
+                            : "*"}
+                        </label>
+                        <select
+                          value={formDataBookingRoom.waktuMulai}
+                          onChange={(e) =>
+                            setFormDataBookingRoom((prev) => ({
+                              ...prev,
+                              waktuMulai: e.target.value,
+                              waktuSelesai: "",
+                            }))
+                          }
+                          disabled={
+                            // Disabled jika Online dan pilih "Mulai Sekarang"
+                            (formDataBookingRoom.jenisRapat === "Online" &&
+                              formDataBookingRoom.mulaiSekarang === true) ||
+                            // Disabled jika tanggal kosong
+                            formDataBookingRoom.tanggal === "" ||
+                            // Disabled jika bukan Online dan ruangan kosong
+                            (formDataBookingRoom.jenisRapat !== "Online" &&
+                              formDataBookingRoom.ruangan === "")
+                          }
+                          className={`w-full text-sm border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent
+        ${
+          (formDataBookingRoom.jenisRapat === "Online" &&
+            formDataBookingRoom.mulaiSekarang === true) ||
+          formDataBookingRoom.tanggal === "" ||
+          (formDataBookingRoom.jenisRapat !== "Online" &&
+            formDataBookingRoom.ruangan === "")
+            ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
+            : "border-gray-300"
+        }`}
+                        >
+                          <option value="">
+                            {formDataBookingRoom.jenisRapat === "Online" &&
+                            formDataBookingRoom.mulaiSekarang === true
+                              ? "Waktu saat ini"
+                              : "Pilih Jam"}
+                          </option>
+                          {formDataBookingRoom.jenisRapat === "Online" &&
+                          formDataBookingRoom.mulaiSekarang === true
+                            ? null
+                            : getAvailableStartSlots({
+                                selectedDate: new Date(
+                                  formDataBookingRoom.tanggal
+                                ),
+                                jenisRapat: formDataBookingRoom.jenisRapat,
+                                room: dataRoomsSelectedTanggal?.[0],
+                                typePopUpBook, // kasih prop ini
+                                currentMeeting:
+                                  typePopUpBook === "edit meeting"
+                                    ? normalizeMeeting(selectedMeeting)
+                                    : selectedMeeting, // { startTime: "09:00", endTime: "10:00" }
+                              }).map((slot) => (
+                                <option key={slot} value={slot}>
+                                  {slot}
+                                </option>
+                              ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Jam Selesai{" "}
+                          {formDataBookingRoom.jenisRapat === "Online" &&
+                          formDataBookingRoom.mulaiSekarang === true
+                            ? ""
+                            : "*"}
+                        </label>
+                        {formDataBookingRoom.jenisRapat === "Online" ? (
+                          <select
+                            value={formDataBookingRoom.waktuSelesai}
+                            onChange={(e) =>
+                              setFormDataBookingRoom((prev) => ({
+                                ...prev,
+                                waktuSelesai: e.target.value,
+                              }))
+                            }
+                            disabled={
+                              // Disabled jika pilih "Mulai Sekarang"
+                              formDataBookingRoom.mulaiSekarang === true ||
+                              // Disabled jika start time atau tanggal kosong (untuk pilih jadwal)
+                              (formDataBookingRoom.mulaiSekarang === false &&
+                                (formDataBookingRoom.waktuMulai === "" ||
+                                  formDataBookingRoom.tanggal === ""))
+                            }
+                            className={`w-full text-sm border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              formDataBookingRoom.mulaiSekarang === true ||
+                              (formDataBookingRoom.mulaiSekarang === false &&
+                                (formDataBookingRoom.waktuMulai === "" ||
+                                  formDataBookingRoom.tanggal === ""))
+                                ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
+                                : "border-gray-300"
+                            }`}
+                          >
+                            <option value="">
+                              {formDataBookingRoom.jenisRapat === "Online" &&
+                              formDataBookingRoom.mulaiSekarang === true
+                                ? "Tidak perlu jam selesai"
+                                : "Pilih Jam"}
+                            </option>
+                            {formDataBookingRoom.mulaiSekarang === true
+                              ? null
+                              : getAvailableEndSlots({
+                                  selectedDate: new Date(
+                                    formDataBookingRoom.tanggal
+                                  ),
+                                  startHHMM: formDataBookingRoom.waktuMulai,
+                                  room: dataRoomsSelectedTanggal?.[0],
+                                  currentMeeting:
+                                    typePopUpBook === "edit meeting"
+                                      ? normalizeMeeting(selectedMeeting)
+                                      : selectedMeeting,
+                                }).map((slot) => (
+                                  <option key={slot} value={slot}>
+                                    {slot}
+                                  </option>
+                                ))}
+                          </select>
+                        ) : (
+                          <select
+                            value={formDataBookingRoom.waktuSelesai}
+                            onChange={(e) =>
+                              setFormDataBookingRoom((prev) => ({
+                                ...prev,
+                                waktuSelesai: e.target.value,
+                              }))
+                            }
+                            disabled={
+                              formDataBookingRoom.waktuMulai === "" ||
+                              formDataBookingRoom.tanggal === ""
+                            }
+                            className={`w-full text-sm border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              formDataBookingRoom.waktuMulai === "" ||
+                              formDataBookingRoom.tanggal === ""
+                                ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
+                                : "border-gray-300"
+                            }`}
+                          >
+                            <option value="">Pilih Jam</option>
+                            {getAvailableEndSlots({
+                              selectedDate: new Date(
+                                formDataBookingRoom.tanggal
+                              ),
+                              startHHMM: formDataBookingRoom.waktuMulai,
+                              room: dataRoomsSelectedTanggal?.[0],
+                              currentMeeting:
+                                typePopUpBook === "edit meeting"
+                                  ? normalizeMeeting(selectedMeeting)
+                                  : selectedMeeting,
+                            }).map((slot) => (
+                              <option key={slot} value={slot}>
+                                {slot}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Row 3: Time Slots Visualization */}
+                    {formDataBookingRoom.jenisRapat !== "Online" &&
+                      formDataBookingRoom.tanggal !== "" && (
+                        <div className="grid grid-cols-12 gap-2 mt-2 py-2 pr-8">
+                          {splitSlotsByMeetings(
+                            timeSlots,
+                            dataRoomsSelectedTanggal?.[0]
+                          )
+                            .flatMap((timeSlot, index) => {
+                              const meeting =
+                                dataRoomsSelectedTanggal?.[0]?.meetings[
+                                  timeSlot.key
+                                ];
+                              const isSpanned = isSlotSpanned(
+                                dataRoomsSelectedTanggal?.[0],
+                                timeSlot.key
+                              );
+                              if (isSpanned) return [];
+
+                              const slotStart = new Date(
+                                `1970-01-01T${timeSlot.start}:00`
+                              );
+                              const slotEnd = new Date(
+                                `1970-01-01T${timeSlot.end}:00`
+                              );
+                              const slotDuration =
+                                (slotEnd.getTime() - slotStart.getTime()) /
+                                (1000 * 60); // menit
+
+                              if (meeting) {
+                                return splitMeetingToFitGrid(
+                                  meeting,
+                                  8,
+                                  index,
+                                  slotDuration
+                                ).map((part, idx) => ({
+                                  ...timeSlot,
+                                  meeting: part,
+                                  colSpan: part.colSpan,
+                                  label: `${part.startTime}-${part.endTime}`,
+                                  isFirstPart: part.isFirstPart,
+                                  isLastPart: part.isLastPart,
+                                }));
+                              }
+
+                              return [
+                                {
+                                  ...timeSlot,
+                                  meeting: null,
+                                  colSpan: 1,
+                                },
+                              ];
+                            })
+                            .map((slot, idx) => {
+                              const meeting = slot.meeting;
+
+                              const isSpanned = isSlotSpanned(
+                                dataRoomsSelectedTanggal?.[0],
+                                slot.key
+                              );
+                              if (isSpanned) return null;
+
+                              const status = meeting
+                                ? getSlotStatus(
+                                    dataRoomsSelectedTanggal?.[0],
+                                    slot.key
+                                  )
+                                : "available";
+                              const now = new Date();
+                              const selectedDate = new Date(); // atau tanggal yang dipilih user
+
+                              // Ambil jam dan menit dari slot.key (format "HH:mm")
+                              const [slotHour, slotMinute] = slot.key
+                                .split(":")
+                                .map(Number);
+
+                              // Gabungkan tanggal hari ini dengan jam slot
+                              const slotTime = new Date(selectedDate);
+                              slotTime.setHours(slotHour, slotMinute, 0, 0);
+
+                              const parseHHMM = (hhmm) => {
+                                const [h, m] = hhmm.split(":").map(Number);
+                                const d = new Date(selectedDate);
+                                d.setHours(h, m, 0, 0);
+                                return d;
+                              };
+
+                              let slotStart = parseHHMM(slot.start);
+                              let slotEnd = parseHHMM(slot.end);
+                              if (slotEnd <= slotStart)
+                                slotEnd.setDate(slotEnd.getDate() + 1);
+
+                              const isCurrentTime =
+                                now >= slotStart && now < slotEnd;
+                              const isPastTime = now >= slotEnd;
+
+                              const isDisabled =
+                                (isPastTime && !meeting) ||
+                                (isCurrentTime && !meeting);
+                              const isUnavailable = isPastTime || isCurrentTime;
+
+                              return (
+                                <button
+                                  key={idx}
+                                  onClick={() =>
+                                    handleSlotClickVisualization(
+                                      dataRoomsSelectedTanggal?.[0],
+                                      slot
+                                    )
+                                  }
+                                  disabled={
+                                    (isUnavailable && !meeting) || meeting
+                                  }
+                                  className={`
+    group relative p-2 rounded text-xs transition-all 
+    h-[72px] border flex flex-col justify-center items-center
+    ${getSlotColor(status, meeting)}
+    ${isCurrentTime ? "ring-2 ring-blue-500" : ""}
+    ${
+      (isPastTime && !meeting) || meeting || isCurrentTime
+        ? "opacity-40 cursor-not-allowed"
+        : "hover:shadow-sm hover:scale-[1.02] cursor-pointer"
+    }
+    ${
+      meeting && meeting.isSplit
+        ? meeting.isFirstPart
+          ? "border-r-0 rounded-r-none"
+          : meeting.isLastPart
+          ? "border-l-0 rounded-l-none"
+          : "border-l-0 border-r-0 rounded-none"
+        : ""
+    }
+  `}
+                                  style={
+                                    slot.colSpan > 1
+                                      ? {
+                                          gridColumn: `span ${slot.colSpan}`,
+                                        }
+                                      : {}
+                                  }
+                                >
+                                  {/* Tooltip on hover */}
+                                  <div
+                                    className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 
+    bg-gray-900 text-white text-[10px] rounded shadow-lg
+    opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none"
+                                  >
+                                    {isPastTime || isUnavailable
+                                      ? "Telah Lewat"
+                                      : meeting
+                                      ? "Terbooking"
+                                      : "Booking Slot Ruangan"}
+                                  </div>
+
+                                  {/* Current Time Indicator */}
+                                  {isCurrentTime && (
+                                    <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 z-10">
+                                      <div className="bg-blue-500 text-white text-[8px] px-1 py-0.5 rounded-full font-bold shadow">
+                                        Sekarang
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Time Display */}
+                                  <div className="font-mono text-[10px] font-semibold text-center mb-1">
+                                    {meeting
+                                      ? `${meeting.startTime}-${meeting.endTime}`
+                                      : slot.label}
+                                  </div>
+
+                                  {/* Content */}
+                                  {meeting ? (
+                                    <div className="flex-1 flex flex-col justify-center items-center space-y-0.5 min-w-0">
+                                      <div className="font-medium text-[10px] leading-tight text-center truncate w-full px-1">
+                                        {meeting.title}
+                                      </div>
+                                      <div className="text-[8px] flex items-center gap-1 opacity-75">
+                                        <span>{meeting.participants}</span>
+                                        <Users size={8} />
+                                      </div>
+                                      <div className="text-[8px] opacity-60">
+                                        {formatDuration(meeting.duration)}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="text-[10px] opacity-60 text-center">
+                                      {isUnavailable
+                                        ? "Telah Lewat"
+                                        : "Tersedia"}
+                                    </div>
+                                  )}
+
+                                  {/* Priority dot */}
+
+                                  {/* Duration bar */}
+                                </button>
+                              );
+                            })}
+                        </div>
+                      )}
+
+                    {/* Row 4: Participants & Meeting Type */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Peserta Rapat *
+                        </label>
+                        <Select
+                          inputId="meeting-atendee"
+                          name="pesertaRapat"
+                          options={employeeOptions}
+                          value={(employeeOptions || [])
+                            .flatMap((group) => group.options || [])
+                            .filter((opt) =>
+                              formDataBookingRoom.pesertaRapat?.includes(
+                                opt.value
+                              )
+                            )}
+                          onChange={(selectedOptions) => {
+                            let newSelection = [...(selectedOptions || [])];
+
+                            // Cek apakah ada yang memilih "Semua Karyawan Unit ..."
+                            const allUnitSelected = newSelection.find((opt) =>
+                              opt.value.startsWith("unit_")
+                            );
+                            if (allUnitSelected) {
+                              const unitName = allUnitSelected.value.replace(
+                                "unit_",
+                                ""
+                              );
+
+                              // Cari semua pegawai dari unit itu
+                              const unitGroup = employeeOptions.find(
+                                (group) => group.label === unitName
+                              );
+                              if (unitGroup) {
+                                // Gabungkan semua pegawai unit itu ke dalam pilihan
+                                newSelection = [
+                                  ...newSelection.filter(
+                                    (opt) => !opt.value.startsWith("unit_")
+                                  ), // hapus tag unit
+                                  ...unitGroup.options.filter(
+                                    (opt) => !opt.value.startsWith("unit_")
+                                  ), // ambil semua pegawai unit
+                                ];
+
+                                // Hilangkan duplikat berdasarkan value
+                                const seen = new Set();
+                                newSelection = newSelection.filter((opt) => {
+                                  if (seen.has(opt.value)) return false;
+                                  seen.add(opt.value);
+                                  return true;
+                                });
+                              }
+                            }
+
+                            setFormDataBookingRoom((prev) => ({
+                              ...prev,
+                              pesertaRapat: newSelection.map(
+                                (opt) => opt.value
+                              ),
+                            }));
+                          }}
+                          isMulti
+                          className="text-sm text-black"
+                          classNamePrefix="react-select"
+                          placeholder="Pilih Peserta..."
+                          isSearchable
+                          menuPlacement="auto"
+                          styles={{
+                            menuList: (base) => ({
+                              ...base,
+                              maxHeight: 200, // misalnya tinggi sekitar 5 item
+                              overflowY: "auto",
+                            }),
+                          }}
+                        />
+                      </div>
+
+                      {typePopUpBook === "room" && (
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Jenis Rapat *
+                          </label>
+                          <div className="flex space-x-4 mt-2">
+                            {[
+                              {
+                                value: "Offline",
+                                icon: Users,
+                                label: "Offline",
+                              },
+                              { value: "Online", icon: Video, label: "Online" },
+                              {
+                                value: "Hybrid",
+                                icon: Monitor,
+                                label: "Hybrid",
+                              },
+                            ]
+                              // Filter berdasarkan typePopUpBook
+                              .filter((option) => {
+                                if (typePopUpBook === "room") {
+                                  return option.value !== "Online";
+                                }
+                                return true; // "meeting" boleh semua
+                              })
+                              .map((option) => (
+                                <label
+                                  key={option.value}
+                                  className="flex items-center space-x-1 cursor-pointer"
+                                >
+                                  <input
+                                    type="radio"
+                                    name="jenisRapat"
+                                    value={option.value}
+                                    checked={
+                                      formDataBookingRoom.jenisRapat ===
+                                      option.value
+                                    }
+                                    onChange={handleChange}
+                                    className="w-4 h-4 text-blue-600 cursor-pointer focus:ring-blue-500"
+                                  />
+                                  <option.icon
+                                    size={16}
+                                    className="text-gray-600"
+                                  />
+                                  <span className="text-xs text-gray-700">
+                                    {option.label}
+                                  </span>
+                                </label>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Row 5: Meeting Link & Email Invitation */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      {(formDataBookingRoom.jenisRapat === "Online" ||
+                        formDataBookingRoom.jenisRapat === "Hybrid") &&
+                        typePopUpBook === "room" && (
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Link Meeting *
+                            </label>
+                            <input
+                              type="url"
+                              name="linkMeet"
+                              value={formDataBookingRoom.linkMeet}
+                              onChange={handleChange}
+                              className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="https://meet.google.com/..."
+                            />
+                          </div>
+                        )}
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Kirim Undangan Meeting ke Email Peserta? *
+                        </label>
+                        <div className="flex items-center space-x-4 mt-2">
+                          <label className="flex items-center space-x-1 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="kirimUndanganEmail"
+                              value="true"
+                              checked={
+                                formDataBookingRoom.kirimUndanganEmail === true
+                              }
+                              onChange={() =>
+                                setFormDataBookingRoom((prev) => ({
+                                  ...prev,
+                                  kirimUndanganEmail: true,
+                                }))
+                              }
+                              className="w-4 h-4 text-blue-600 cursor-pointer focus:ring-blue-500"
+                            />
+                            <span className="text-xs text-gray-700">Ya</span>
+                          </label>
+
+                          <label className="flex items-center space-x-1 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="kirimUndanganEmail"
+                              value="false"
+                              checked={
+                                formDataBookingRoom.kirimUndanganEmail === false
+                              }
+                              onChange={() =>
+                                setFormDataBookingRoom((prev) => ({
+                                  ...prev,
+                                  kirimUndanganEmail: false,
+                                }))
+                              }
+                              className="w-4 h-4 text-blue-600 cursor-pointer focus:ring-blue-500"
+                            />
+                            <span className="text-xs text-gray-700">Tidak</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <p>Apakah anda yakin ingin delete meeting ini?</p>
+                )}
               </div>
             </div>
 
             {/* Footer - Fixed */}
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0 pt-4">
               <div className="flex justify-end space-x-4">
                 <button
                   type="button"
@@ -3069,15 +4211,86 @@ const KaiRoomsApp = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={handleSubmit}
-                  disabled={isLoadingSubmit}
+                  onClick={() => {
+                    setShowPopup(false);
+                    if (typePopUpBook === "delete meeting") {
+                      handleDelete(selectedMeeting);
+                    } else if (typePopUpBook === "edit meeting") {
+                      handleEdit();
+                    } else {
+                      handleBookingSubmit();
+                    }
+                  }}
+                  disabled={
+                    typePopUpBook === "meeting" || typePopUpBook === "room"
+                      ? isLoadingSubmit || !isFormValid(formDataBookingRoom)
+                      : typePopUpBook === "delete meeting"
+                      ? isLoadingDelete
+                      : typePopUpBook === "edit meeting"
+                      ? isLoadingEdit
+                      : ""
+                  }
                   className={`px-3 py-1 rounded-lg transition-all flex items-center space-x-2 ${
-                    isLoadingSubmit
-                      ? "bg-gray-400 text-white cursor-not-allowed"
+                    typePopUpBook === "meeting" || typePopUpBook === "room"
+                      ? isLoadingSubmit || !isFormValid(formDataBookingRoom)
+                        ? "bg-gray-400 text-white cursor-not-allowed"
+                        : "bg-[#ff7729] text-white cursor-pointer hover:shadow-lg"
+                      : typePopUpBook === "delete meeting"
+                      ? isLoadingDelete
+                        ? "bg-gray-400 text-white cursor-not-allowed"
+                        : "bg-[#ff7729] text-white cursor-pointer hover:shadow-lg"
+                      : typePopUpBook === "edit meeting"
+                      ? isLoadingEdit
+                        ? "bg-gray-400 text-white cursor-not-allowed"
+                        : "bg-[#ff7729] text-white cursor-pointer hover:shadow-lg"
                       : "bg-[#ff7729] text-white cursor-pointer hover:shadow-lg"
                   }`}
                 >
                   {isLoadingSubmit && (
+                    <svg
+                      className="animate-spin h-4 w-4 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                  )}
+                  {isLoadingEdit && (
+                    <svg
+                      className="animate-spin h-4 w-4 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                  )}
+                  {isLoadingDelete && (
                     <svg
                       className="animate-spin h-4 w-4 text-white"
                       xmlns="http://www.w3.org/2000/svg"
@@ -3104,10 +4317,196 @@ const KaiRoomsApp = () => {
                       ? "Sedang diproses..."
                       : typePopUpBook === "room"
                       ? "Book Ruangan"
-                      : "Buat Meeting"}
+                      : typePopUpBook === "meeting"
+                      ? "Buat Meeting"
+                      : typePopUpBook === "edit meeting"
+                      ? "Edit Meeting"
+                      : typePopUpBook === "delete meeting"
+                      ? "Delete Meeting"
+                      : ""}
                   </span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {showConfirmationPopUp && (
+        <div className="fixed text-black text-sm inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div
+            className="absolute inset-0 bg-gradient-to-br from-blue-900/20 via-purple-900/10 to-pink-900/20 backdrop-blur-md"
+            onClick={closeConfirmationModal}
+          ></div>
+
+          <div className="relative bg-white rounded-2xl shadow-2xl px-8 py-6 w-full max-w-md mx-4">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-orange-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Konfirmasi{" "}
+                  {confirmationType === "booking"
+                    ? "Booking"
+                    : confirmationType === "meeting"
+                    ? "Buat Meeting"
+                    : "Tindakan"}
+                </h3>
+              </div>
+
+              <button
+                onClick={closeConfirmationModal}
+                className="p-2 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
+                disabled={isConfirmationLoading}
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="mb-6">
+              <p className="text-gray-600 mb-4">
+                {confirmationMessage ||
+                  "Apakah Anda yakin ingin melanjutkan tindakan ini?"}
+              </p>
+
+              {/* Detail Information (if any) */}
+              {confirmationDetails && (
+                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                  {confirmationDetails.namaRapat && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Nama Rapat:</span>
+                      <span className="font-medium text-gray-900">
+                        {confirmationDetails.namaRapat}
+                      </span>
+                    </div>
+                  )}
+                  {confirmationDetails.tanggal && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Tanggal:</span>
+                      <span className="font-medium text-gray-900">
+                        {new Date(
+                          confirmationDetails.tanggal
+                        ).toLocaleDateString("id-ID", {
+                          weekday: "long",
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  {confirmationDetails.waktu && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Waktu:</span>
+                      <span className="font-medium text-gray-900">
+                        {confirmationDetails.waktu.mulai} -{" "}
+                        {confirmationDetails.waktu.selesai || "Selesai"}
+                      </span>
+                    </div>
+                  )}
+                  {confirmationDetails.ruangan && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Ruangan:</span>
+                      <span className="font-medium text-gray-900">
+                        {confirmationDetails.ruangan}
+                      </span>
+                    </div>
+                  )}
+                  {confirmationDetails.jenisRapat && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Jenis Rapat:</span>
+                      <span className="font-medium text-gray-900">
+                        {confirmationDetails.jenisRapat}
+                      </span>
+                    </div>
+                  )}
+                  {confirmationDetails.pesertaCount && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Jumlah Peserta:</span>
+                      <span className="font-medium text-gray-900">
+                        {confirmationDetails.pesertaCount} orang
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Warning Message (if any) */}
+              {confirmationWarning && (
+                <div className="mt-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+                  <div className="flex items-center">
+                    <AlertTriangle className="w-4 h-4 text-yellow-600 mr-2" />
+                    <p className="text-sm text-yellow-700">
+                      {confirmationWarning}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={closeConfirmationModal}
+                className="px-4 py-2 border cursor-pointer border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                disabled={isConfirmationLoading}
+              >
+                Batal
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmAction}
+                disabled={isConfirmationLoading}
+                className={`px-4 py-2 rounded-lg cursor-pointer transition-all flex items-center space-x-2 font-medium ${
+                  confirmationType === "delete" || confirmationType === "cancel"
+                    ? isConfirmationLoading
+                      ? "bg-gray-400 text-white cursor-not-allowed"
+                      : "bg-red-600 text-white hover:bg-red-700 hover:shadow-lg"
+                    : isConfirmationLoading
+                    ? "bg-gray-400 text-white cursor-not-allowed"
+                    : "bg-[#ff7729] text-white hover:bg-[#e6691f] hover:shadow-lg"
+                }`}
+              >
+                {isConfirmationLoading && (
+                  <svg
+                    className="animate-spin h-4 w-4 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                )}
+                <span>
+                  {isConfirmationLoading
+                    ? "Memproses..."
+                    : confirmationType === "delete"
+                    ? "Ya, Hapus"
+                    : confirmationType === "cancel"
+                    ? "Ya, Batalkan"
+                    : confirmationType === "booking"
+                    ? "Ya, Book Sekarang"
+                    : confirmationType === "meeting"
+                    ? "Ya, Buat Meeting Sekarang"
+                    : "Ya, Lanjutkan"}
+                </span>
+              </button>
             </div>
           </div>
         </div>
@@ -3123,7 +4522,7 @@ const KaiRoomsApp = () => {
                 </h2>
                 <button
                   onClick={() => setShowSearchPopup(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-2 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
                 >
                   <X size={20} />
                 </button>

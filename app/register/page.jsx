@@ -6,20 +6,24 @@ import { toast, ToastContainer } from "react-toastify";
 import { fetchUnitList } from "../../api-client/unit";
 import { X } from "lucide-react";
 import { set } from "date-fns";
+import { fetchEmployeeList } from "../../api-client/employee";
 
 function SignUpPage() {
   const [formDataRegister, setFormDataRegister] = useState({
     name: "",
     email: "",
-    noTelp: "",
-    password: "",
+    nipp: "",
     unitId: "",
     agree: false,
   });
 
+  const [dataSelectedEmployee, setDataSelectedEmployee] = useState(null);
+
   const [dataUnit, setDataUnit] = useState(null);
   const [loadingUnits, setLoadingUnits] = useState(true);
+  const [loadingEmployee, setLoadingEmployee] = useState(true);
   const [modalSnk, setModalSnk] = useState(false);
+  const [dataEmployee, setDataEmployee] = useState(null);
 
   useEffect(() => {
     async function loadUnit() {
@@ -44,6 +48,42 @@ function SignUpPage() {
     }
     loadUnit();
   }, []);
+
+  useEffect(() => {
+    if (formDataRegister.unitId) {
+      async function loadEmployee(unitId) {
+        try {
+          setLoadingEmployee(true);
+          const data = await fetchEmployeeList(undefined, unitId);
+          setDataEmployee(data);
+        } catch (error) {
+          toast.error("Gagal memuat data employee: " + error.message, {
+            position: "bottom-right",
+            autoClose: 3000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            theme: "colored",
+          });
+        } finally {
+          setLoadingEmployee(false);
+        }
+      }
+      loadEmployee(formDataRegister.unitId);
+    }
+  }, [formDataRegister.unitId]);
+
+  useEffect(() => {
+    if (dataSelectedEmployee) {
+      setFormDataRegister((prev) => ({
+        ...prev,
+        email: dataSelectedEmployee.email,
+        nipp: dataSelectedEmployee.nipp,
+      }));
+    }
+  }, [dataSelectedEmployee]);
 
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -75,29 +115,6 @@ function SignUpPage() {
       });
       return;
     }
-
-    const passwordValid = /^(?=.*[A-Z])(?=.*[\W_]).{8,}$/.test(
-      formDataRegister.password
-    );
-
-    if (!passwordValid) {
-      toast.error(
-        "Password minimal 8 karakter, mengandung huruf besar dan simbol.",
-        {
-          position: "bottom-right",
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-          theme: "colored",
-        }
-      );
-      return;
-    }
-
-    console.log(formDataRegister);
 
     try {
       const res = await registerUser({ ...formDataRegister });
@@ -132,6 +149,7 @@ function SignUpPage() {
     }
   };
 
+<<<<<<< HEAD
 return (
        <div className="flex h-screen font-['Segoe_UI',sans-serif] text-black">
                {/* Kiri */}
@@ -148,6 +166,26 @@ return (
             { src: "/images/A7.png", },
           ]
   
+=======
+  console.log("ini form register", formDataRegister);
+
+  return (
+    <div className="flex h-screen font-['Segoe_UI',sans-serif] text-black">
+      {/* Kiri */}
+      <div className="flex-1 bg-gray-300 text-black flex flex-col justify-center items-center p-5 transition-all duration-500">
+        {/* Slideshow */}
+        {(() => {
+          const slides = [
+            { src: "/images/A1.png" },
+            { src: "/images/A2.png" },
+            { src: "/images/A3.png" },
+            { src: "/images/A4.png" },
+            { src: "/images/A5.png" },
+            { src: "/images/A6.png" },
+            { src: "/images/A7.png" },
+          ];
+
+>>>>>>> 48add9bfb07e05a1b09b61eb84cbd8b69e8d7136
           const [currentIndex, setCurrentIndex] = React.useState(0);
 
           React.useEffect(() => {
@@ -203,60 +241,6 @@ return (
             className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 w-full"
             onSubmit={handleSignup}
           >
-            {/* Nama */}
-            <div className="flex flex-col">
-              <label className="text-sm font-medium mb-1">Nama</label>
-              <input
-                type="text"
-                placeholder="Masukkan Nama"
-                value={formDataRegister.name}
-                onChange={(e) =>
-                  setFormDataRegister((prev) => ({
-                    ...prev,
-                    name: e.target.value,
-                  }))
-                }
-                required
-                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff]"
-              />
-            </div>
-
-            {/* Email */}
-            <div className="flex flex-col">
-              <label className="text-sm font-medium mb-1">Email</label>
-              <input
-                type="email"
-                placeholder="Masukkan Email"
-                value={formDataRegister.email}
-                onChange={(e) =>
-                  setFormDataRegister((prev) => ({
-                    ...prev,
-                    email: e.target.value,
-                  }))
-                }
-                required
-                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff]"
-              />
-            </div>
-
-            {/* Nomor Telepon */}
-            <div className="flex flex-col">
-              <label className="text-sm font-medium mb-1">Nomor Telepon</label>
-              <input
-                type="tel"
-                placeholder="Masukkan Nomor Telepon"
-                value={formDataRegister.noTelp}
-                onChange={(e) =>
-                  setFormDataRegister((prev) => ({
-                    ...prev,
-                    noTelp: e.target.value,
-                  }))
-                }
-                required
-                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff]"
-              />
-            </div>
-
             {/* Unit */}
             <div className="flex flex-col">
               <label className="text-sm font-medium mb-1">Unit</label>
@@ -284,22 +268,63 @@ return (
                   ))}
               </select>
             </div>
+            {/* Nama */}
+            <div className="flex flex-col">
+              <label className="text-sm font-medium mb-1">Nama</label>
+              <select
+                value={formDataRegister.employeeId || ""} // pakai id
+                onChange={(e) => {
+                  const selected = dataEmployee.find(
+                    (data) => data.id === e.target.value
+                  );
 
-            {/* Password - full width */}
-            <div className="flex flex-col md:col-span-2">
-              <label className="text-sm font-medium mb-1">Password</label>
-              <input
-                type="password"
-                placeholder="Masukkan Password"
-                value={formDataRegister.password}
-                onChange={(e) =>
-                  setFormDataRegister((prev) => ({
-                    ...prev,
-                    password: e.target.value,
-                  }))
-                }
+                  if (selected) {
+                    setFormDataRegister((prev) => ({
+                      ...prev,
+                      employeeId: selected.id,
+                      name: selected.name, // tetap simpan name juga
+                    }));
+                    setDataSelectedEmployee(selected);
+                  }
+                }}
                 required
-                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff]"
+                disabled={loadingUnits || !formDataRegister.unitId}
+                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff] bg-gray disabled:bg-gray-100 disabled:cursor-not-allowed"
+              >
+                <option value="">
+                  {loadingUnits ? "Memuat nama..." : "Pilih Nama"}
+                </option>
+                {dataEmployee &&
+                  Array.isArray(dataEmployee) &&
+                  dataEmployee.map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {/* Email */}
+            <div className="flex flex-col">
+              <label className="text-sm font-medium mb-1">Email</label>
+              <input
+                type="email"
+                placeholder="Masukkan Email"
+                value={formDataRegister.email}
+                disabled={true}
+                required
+                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff] disabled:bg-gray-100 disabled:cursor-not-allowed"
+              />
+            </div>
+            <div className="flex flex-col">
+              <label className="text-sm font-medium mb-1">NIPP</label>
+              <input
+                type="email"
+                placeholder="Masukkan NIPP"
+                value={formDataRegister.nipp}
+                disabled={true}
+                required
+                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff] disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
             </div>
 
@@ -337,9 +362,9 @@ return (
               <button
                 type="submit"
                 disabled={loadingUnits}
-                className="w-full p-3 bg-[#5a60ea] text-white rounded-lg text-base font-medium hover:bg-[#4a50d0] transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+                className="w-full p-3 bg-[#5a60ea] text-white rounded-lg cursor-pointer text-base font-medium hover:bg-[#4a50d0] transition disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                {loadingUnits ? "Memuat..." : "Daftar"}
+                {loadingUnits ? "Memuat..." : "Setup Akun"}
               </button>
             </div>
           </form>

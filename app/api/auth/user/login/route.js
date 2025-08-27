@@ -29,34 +29,140 @@ function convertTimeToSeconds(timeString) {
   }
 }
 
+// Helper functions untuk device dan location info
+async function getDeviceInfo(req) {
+  const userAgent = req.headers["user-agent"] || "";
+
+  let browser = "Unknown Browser";
+  let os = "Unknown OS";
+  let device = "Desktop Computer";
+
+  // Browser detection
+  if (userAgent.includes("Edg")) browser = "Microsoft Edge";
+  else if (userAgent.includes("Chrome")) browser = "Google Chrome";
+  else if (userAgent.includes("Firefox")) browser = "Mozilla Firefox";
+  else if (userAgent.includes("Safari") && !userAgent.includes("Chrome"))
+    browser = "Safari";
+  else if (userAgent.includes("Opera")) browser = "Opera";
+
+  // OS detection
+  if (userAgent.includes("Windows NT")) os = "Windows";
+  else if (userAgent.includes("Mac OS X")) os = "macOS";
+  else if (userAgent.includes("Linux") && !userAgent.includes("Android"))
+    os = "Linux";
+  else if (userAgent.includes("Android")) os = "Android";
+  else if (userAgent.includes("iPhone OS") || userAgent.includes("iPad"))
+    os = "iOS";
+
+  // Device detection
+  if (userAgent.includes("Mobile") && !userAgent.includes("iPad"))
+    device = "Mobile Device";
+  else if (userAgent.includes("iPad") || userAgent.includes("Tablet"))
+    device = "Tablet";
+  else device = "Desktop Computer";
+
+  return { browser, os, device };
+}
+
+async function getLocationInfo(req) {
+  try {
+    // Get real IP address (considering proxies)
+    const ip =
+      req.headers["x-forwarded-for"] ||
+      req.headers["x-real-ip"] ||
+      req.connection.remoteAddress ||
+      req.socket.remoteAddress ||
+      (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+      "127.0.0.1";
+
+    const realIp = ip.split(",")[0].trim();
+
+    // Skip localhost/private IPs
+    if (
+      realIp === "127.0.0.1" ||
+      realIp === "::1" ||
+      realIp.startsWith("192.168.") ||
+      realIp.startsWith("10.")
+    ) {
+      return {
+        ip: "Local Network",
+        city: "Local",
+        region: "Local Network",
+        country: "Indonesia",
+      };
+    }
+
+    // Use free IP geolocation service
+    const response = await fetch(
+      `http://ip-api.com/json/${realIp}?fields=country,regionName,city,status`
+    );
+    const data = await response.json();
+
+    if (data.status === "success") {
+      return {
+        ip: realIp,
+        city: data.city || "Unknown City",
+        region: data.regionName || "Unknown Region",
+        country: data.country || "Unknown Country",
+      };
+    } else {
+      throw new Error("Geolocation failed");
+    }
+  } catch (error) {
+    console.error("Error getting location info:", error);
+    return {
+      ip: "Unknown",
+      city: "Unknown City",
+      region: "Unknown Region",
+      country: "Indonesia",
+    };
+  }
+}
+
 export async function POST(req) {
   try {
     const body = await req.json();
-    const { email, password } = body;
+    const { identifier, password } = body;
 
-    if (!email && !password) {
-      return new Response(JSON.stringify({ message: "Email dan Password wajib diisi!" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    } else if (!email) {
-      return new Response(JSON.stringify({ message: "Email wajib diisi!" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+    if (!identifier && !password) {
+      return new Response(
+        JSON.stringify({ message: "NIPP / Email dan Password wajib diisi!" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    } else if (!identifier) {
+      return new Response(
+        JSON.stringify({ message: "NIPP / Email wajib diisi!" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     } else if (!password) {
-      return new Response(JSON.stringify({ message: "Password wajib diisi!" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ message: "Password wajib diisi!" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    let user = await prisma.user.findUnique({ where: { email: identifier } });
+
     if (!user) {
-      return new Response(JSON.stringify({ message: "Tidak ditemukan akun dengan Email tersebut!" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
+      user = await prisma.user.findUnique({ where: { nipp: identifier } });
+    }
+
+    if (!user) {
+      return new Response(
+        JSON.stringify({
+          message: "Tidak ditemukan akun dengan NIPP / Email tersebut!",
+        }),
+        { status: 404, headers: { "Content-Type": "application/json" } }
+      );
     }
 
     const passwordMatch = await bcrypt.compare(password, user.password);
@@ -72,6 +178,7 @@ export async function POST(req) {
       {
         id: user.id,
         email: user.email,
+        nipp: user.nipp,
         noTelp: user.noTelp,
         nama: user.name,
         role: user.role,
@@ -86,17 +193,16 @@ export async function POST(req) {
       path: "/",
     });
 
-    // Kirim email notifikasi login berhasil
-try {
-  // Get device and location information
-  const deviceInfo = getDeviceInfo(req); 
-  const locationInfo = await getLocationInfo(req);
-  
-  await sendEmail({
-    from: `"Admin KAI Rooms" <${process.env.EMAIL_USER}>`,
-    to: email,
-    subject: "Login Berhasil - KAI Rooms",
-    html: `
+    try {
+      // Get device and location information
+      const deviceInfo = await getDeviceInfo(req);
+      const locationInfo = await getLocationInfo(req);
+
+      await sendEmail({
+        from: `"Admin KAI Rooms" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: "Login Berhasil - KAI Rooms",
+        html: `
       <!DOCTYPE html>
       <html lang="id">
       <head>
@@ -140,7 +246,9 @@ try {
                   <td style="padding: 30px;">
                     <!-- Greeting -->
                     <div style="margin-bottom: 25px;">
-                      <h2 style="color: #1e293b; margin: 0 0 10px; font-size: 22px; font-weight: 600;">Halo, ${user.name}! 👋</h2>
+                      <h2 style="color: #1e293b; margin: 0 0 10px; font-size: 22px; font-weight: 600;">Halo, ${
+                        user.name
+                      }! 👋</h2>
                       <p style="color: #64748b; margin: 0; font-size: 16px; line-height: 1.5;">Kami mendeteksi login baru ke akun KAI Rooms Anda.</p>
                     </div>
 
@@ -170,16 +278,19 @@ try {
                               </td>
                               <td style="vertical-align: top; padding-left: 10px;">
                                 <div style="font-weight: bold; color: #1e293b; font-size: 14px;">Waktu Login</div>
-                                <div style="color: #64748b; font-size: 13px;">${new Date().toLocaleString("id-ID", { 
-                                  timeZone: "Asia/Jakarta",
-                                  weekday: 'long',
-                                  year: 'numeric',
-                                  month: 'long',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                  timeZoneName: 'short'
-                                })}</div>
+                                <div style="color: #64748b; font-size: 13px;">${new Date().toLocaleString(
+                                  "id-ID",
+                                  {
+                                    timeZone: "Asia/Jakarta",
+                                    weekday: "long",
+                                    year: "numeric",
+                                    month: "long",
+                                    day: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    timeZoneName: "short",
+                                  }
+                                )}</div>
                               </td>
                             </tr>
                           </table>
@@ -205,8 +316,12 @@ try {
                               </td>
                               <td style="vertical-align: top; padding-left: 10px;">
                                 <div style="font-weight: bold; color: #1e293b; font-size: 14px;">Perangkat</div>
-                                <div style="color: #64748b; font-size: 13px;">${deviceInfo.browser} di ${deviceInfo.os}</div>
-                                <div style="color: #64748b; font-size: 12px; opacity: 0.8;">${deviceInfo.device}</div>
+                                <div style="color: #64748b; font-size: 13px;">${
+                                  deviceInfo.browser
+                                } di ${deviceInfo.os}</div>
+                                <div style="color: #64748b; font-size: 12px; opacity: 0.8;">${
+                                  deviceInfo.device
+                                }</div>
                               </td>
                             </tr>
                           </table>
@@ -219,8 +334,12 @@ try {
                               </td>
                               <td style="vertical-align: top; padding-left: 10px;">
                                 <div style="font-weight: bold; color: #1e293b; font-size: 14px;">Lokasi</div>
-                                <div style="color: #64748b; font-size: 13px;">${locationInfo.city}, ${locationInfo.region}</div>
-                                <div style="color: #64748b; font-size: 12px; opacity: 0.8;">IP: ${locationInfo.ip}</div>
+                                <div style="color: #64748b; font-size: 13px;">${
+                                  locationInfo.city
+                                }, ${locationInfo.region}</div>
+                                <div style="color: #64748b; font-size: 12px; opacity: 0.8;">IP: ${
+                                  locationInfo.ip
+                                }</div>
                               </td>
                             </tr>
                           </table>
@@ -310,89 +429,12 @@ try {
       </body>
       </html>
     `,
-  });
+      });
 
-  console.log("Login notification email sent successfully");
-} catch (error) {
-  console.error("Failed to send login notification email:", error);
-}
-
-// Helper functions untuk device dan location info
-function getDeviceInfo(req) {
-  const userAgent = req.headers['user-agent'] || '';
-  
-  let browser = 'Unknown Browser';
-  let os = 'Unknown OS';
-  let device = 'Desktop Computer';
-
-  // Browser detection
-  if (userAgent.includes('Edg')) browser = 'Microsoft Edge';
-  else if (userAgent.includes('Chrome')) browser = 'Google Chrome';
-  else if (userAgent.includes('Firefox')) browser = 'Mozilla Firefox';
-  else if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) browser = 'Safari';
-  else if (userAgent.includes('Opera')) browser = 'Opera';
-
-  // OS detection
-  if (userAgent.includes('Windows NT')) os = 'Windows';
-  else if (userAgent.includes('Mac OS X')) os = 'macOS';
-  else if (userAgent.includes('Linux') && !userAgent.includes('Android')) os = 'Linux';
-  else if (userAgent.includes('Android')) os = 'Android';
-  else if (userAgent.includes('iPhone OS') || userAgent.includes('iPad')) os = 'iOS';
-
-  // Device detection
-  if (userAgent.includes('Mobile') && !userAgent.includes('iPad')) device = 'Mobile Device';
-  else if (userAgent.includes('iPad') || userAgent.includes('Tablet')) device = 'Tablet';
-  else device = 'Desktop Computer';
-
-  return { browser, os, device };
-}
-
-async function getLocationInfo(req) {
-  try {
-    // Get real IP address (considering proxies)
-    const ip = req.headers['x-forwarded-for'] || 
-               req.headers['x-real-ip'] || 
-               req.connection.remoteAddress || 
-               req.socket.remoteAddress ||
-               (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
-               '127.0.0.1';
-    
-    const realIp = ip.split(',')[0].trim();
-    
-    // Skip localhost/private IPs
-    if (realIp === '127.0.0.1' || realIp === '::1' || realIp.startsWith('192.168.') || realIp.startsWith('10.')) {
-      return {
-        ip: 'Local Network',
-        city: 'Local',
-        region: 'Local Network',
-        country: 'Indonesia'
-      };
+      console.log("Login notification email sent successfully");
+    } catch (error) {
+      console.error("Failed to send login notification email:", error);
     }
-
-    // Use free IP geolocation service
-    const response = await fetch(`http://ip-api.com/json/${realIp}?fields=country,regionName,city,status`);
-    const data = await response.json();
-    
-    if (data.status === 'success') {
-      return {
-        ip: realIp,
-        city: data.city || 'Unknown City',
-        region: data.regionName || 'Unknown Region',
-        country: data.country || 'Unknown Country'
-      };
-    } else {
-      throw new Error('Geolocation failed');
-    }
-  } catch (error) {
-    console.error('Error getting location info:', error);
-    return {
-      ip: 'Unknown',
-      city: 'Unknown City',
-      region: 'Unknown Region', 
-      country: 'Indonesia'
-    };
-  }
-}
 
     return new Response(JSON.stringify({ message: "Login berhasil!", token }), {
       status: 200,
@@ -402,6 +444,7 @@ async function getLocationInfo(req) {
       },
     });
   } catch (error) {
+    console.log(error);
     return new Response(
       JSON.stringify({
         message: "Terjadi Kesalahan!",

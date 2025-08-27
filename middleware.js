@@ -58,7 +58,8 @@ export function middleware(request) {
     pathname !== "/login" &&
     pathname !== "/register" &&
     pathname !== "/login/lupa-password" &&
-    !pathname.startsWith("/login/reset-password")
+    !pathname.startsWith("/login/reset-password") &&
+    !pathname.startsWith("/setup-account")
   ) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
