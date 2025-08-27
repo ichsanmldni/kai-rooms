@@ -55,21 +55,21 @@ function LoginPage() {
   };
 
   return (
-    <div className="flex h-screen font-['Segoe_UI',sans-serif] text-black">
-      {/* Kiri */}
-      {/* Kiri */}
-      <div className="flex-1 bg-gray-300 text-black flex flex-col justify-center items-center p-5 transition-all duration-500">
-        {/* Slideshow */}
-        {(() => {
-          const slides = [
-            { src: "/images/A1.png" },
-            { src: "/images/A2.png" },
-            { src: "/images/A3.png" },
-            { src: "/images/A4.png" },
-            { src: "/images/A5.png" },
-            { src: "/images/A6.png" },
-            { src: "/images/A7.png" },
-          ];
+       <div className="flex h-screen font-['Segoe_UI',sans-serif] text-black">
+               {/* Kiri */}
+          <div className="flex-1 bg-white 900 text-black flex flex-col justify-center items-center p-5 transition-all duration-500">
+            {/* Slideshow */}
+            {(() => {
+              const slides = [
+            { src: "/images/A1.png", },
+            { src: "/images/A2.png",  },
+            { src: "/images/A3.png", },
+            { src: "/images/A4.png",  },
+            { src: "/images/A5.png",  },
+            { src: "/images/A6.png", },
+            { src: "/images/A7.png", },
+          ]
+  
 
           const [currentIndex, setCurrentIndex] = React.useState(0);
 

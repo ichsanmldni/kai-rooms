@@ -72,7 +72,7 @@ function LupaPasswordPage() {
   return (
        <div className="flex h-screen font-['Segoe_UI',sans-serif] text-black">
                {/* Kiri */}
-          <div className="flex-1 bg-gray 300 text-black flex flex-col justify-center items-center p-5 transition-all duration-500">
+          <div className="flex-1 bg-white 900 text-black flex flex-col justify-center items-center p-5 transition-all duration-500">
             {/* Slideshow */}
             {(() => {
               const slides = [
