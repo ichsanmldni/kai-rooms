@@ -6,8 +6,12 @@ export async function POST(req) {
   try {
     const body = await req.json();
 
+    const { token } = body;
+
+    console.log(body);
+
     // Cek apakah token tersedia
-    if (!body) {
+    if (!token) {
       return NextResponse.json(
         { message: "Token tidak ditemukan" },
         { status: 400 }
@@ -17,8 +21,9 @@ export async function POST(req) {
     // Verifikasi token JWT
     let decoded;
     try {
-      decoded = jwt.verify(body, process.env.JWT_SECRET);
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (err) {
+      console.log(err);
       console.log("ini kah");
       return NextResponse.json(
         { message: "Token tidak valid atau kadaluarsa" },
@@ -32,7 +37,7 @@ export async function POST(req) {
     const user = await prisma.user.findFirst({
       where: {
         id,
-        resetToken: body,
+        resetToken: token,
         resetTokenExpires: { gte: new Date() }, // Token harus masih berlaku
       },
     });

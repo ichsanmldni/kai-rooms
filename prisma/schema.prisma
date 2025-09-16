@@ -107,6 +107,7 @@ model Employee {
   updatedAt DateTime @updatedAt
 }
 
+
 model Notification {
   id        String   @id @default(uuid())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -143,6 +144,7 @@ model Unit {
   employees Employee[]
 
   users     User[]     // Tambahkan ini: relasi ke User
+  UserRegistrations UserRegistration[]
 
   meetingsOrganized Meeting[] @relation("UnitOrganizedMeetings")
 
@@ -150,3 +152,33 @@ model Unit {
   updatedAt DateTime @updatedAt
 }
 
+model UserRegistration {
+  id        String   @id @default(uuid())
+  name      String  
+  email     String @unique
+  nipp      String @unique
+  unitId    String
+  unit      Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  password  String?
+
+  status    RegistrationStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+
+model TermsCondition {
+  id        String   @id @default(uuid())
+  title     String   @default("Terms & Conditions") // opsional, kalau mau kasih judul
+  content   String   @db.LongText                  // isi T&C
+  isActive  Boolean  @default(true)                // bisa toggle kalau ada versi lama
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

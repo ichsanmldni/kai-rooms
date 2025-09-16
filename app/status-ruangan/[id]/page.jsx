@@ -826,7 +826,7 @@ export default function StatusRuanganDetail() {
                   </div>
 
                   <div className="relative z-10">
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+                    <div className="grid grid-cols-2 2xl:grid-cols-1 gap-6 items-start">
                       {/* Meeting Details */}
                       <div className="xl:col-span-1 space-y-6">
                         <div className="flex items-start space-x-4">
@@ -1000,7 +1000,7 @@ export default function StatusRuanganDetail() {
           {!currentMeeting &&
             nextMeeting &&
             getTimeUntilNextInMinutes(nextMeeting) <= 10 && (
-              <div className="w-full max-w-4xl">
+              <div className="">
                 {/* Header dengan animasi */}
                 <div className="text-center mb-8 animate-bounce-slow">
                   <div className="inline-flex items-center space-x-2 bg-amber-500/10 px-4 py-2 rounded-xl mb-4">
@@ -1027,7 +1027,7 @@ export default function StatusRuanganDetail() {
                     </div>
 
                     <div className="relative z-10">
-                      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+                      <div className="grid grid-cols-3 2xl:grid-cols-2 gap-6 items-start">
                         {/* Meeting Details */}
                         <div className="xl:col-span-2 space-y-6">
                           <div className="flex items-start space-x-4">

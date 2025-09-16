@@ -17,6 +17,8 @@ import {
   Landmark,
   Clock,
   Bell,
+  User,
+  FileText,
 } from "lucide-react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -40,7 +42,18 @@ import {
   fetchRoomList,
   updateRoom,
 } from "../../api-client/room";
+import {
+  createTnc,
+  deleteTnc,
+  fetchTncList,
+  updateTnc,
+} from "../../api-client/tnc";
 import { fetchMeetingList, deleteMeeting } from "../../api-client/meeting";
+import {
+  fetchUserRegistration,
+  fetchUserRegistrationById,
+  updateUserRegistration,
+} from "../../api-client/user";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("employee");
@@ -51,9 +64,11 @@ export default function AdminDashboard() {
 
   // data lists
   const [employeeList, setEmployeeList] = useState([]);
+  const [userRegistrationList, setUserRegistrationList] = useState([]);
   const [unitList, setUnitList] = useState([]);
   const [roomList, setRoomList] = useState([]);
   const [meetings, setMeetings] = useState([]);
+  const [tncList, setTncList] = useState([]);
 
   // clock
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -63,8 +78,12 @@ export default function AdminDashboard() {
     name: "",
     email: "",
     unitId: "",
+    nipp: "",
     capacity: 0,
     location: "",
+    title: "",
+    content: "",
+    isActive: true,
   });
 
   // meeting controls
@@ -76,13 +95,16 @@ export default function AdminDashboard() {
   const [filteredEmployees, setFilteredEmployees] = useState([]);
 
   console.log(unitList, "ini unit list");
+  console.log(formData, "ini form data");
   // Ambil unique unit dari data employees
 
   const tabs = [
     { id: "employee", label: "Employee", icon: Users, color: "blue" },
     { id: "unit", label: "Unit", icon: Landmark, color: "teal" },
     { id: "room", label: "Room", icon: Building2, color: "green" },
+    { id: "user", label: "User", icon: User, color: "green" },
     { id: "meeting", label: "Meeting", icon: Bell, color: "violet" },
+    { id: "tnc", label: "T&C", icon: FileText, color: "violet" },
   ];
 
   useEffect(() => {
@@ -120,6 +142,11 @@ export default function AdminDashboard() {
         setRoomList(Array.isArray(rooms) ? rooms : rooms.data || []);
       } else if (activeTab === "meeting") {
         await loadMeetings();
+      } else if (activeTab === "user") {
+        await loadUserRegistration();
+      } else if (activeTab === "tnc") {
+        const tncs = await fetchTncList();
+        setTncList(Array.isArray(tncs) ? tncs : tncs.data || []);
       }
     } catch (error) {
       console.error("Error loading data:", error);
@@ -173,6 +200,20 @@ export default function AdminDashboard() {
       });
 
       setMeetings(meetingData);
+    } catch (error) {
+      console.error("Failed to fetch meeting data:", error);
+      setMeetings([]);
+      toast.error("Gagal memuat data rapat");
+    } finally {
+      setLoading(false);
+    }
+  };
+  const loadUserRegistration = async () => {
+    setLoading(true);
+    try {
+      const res = await fetchUserRegistration();
+
+      setUserRegistrationList(res);
     } catch (error) {
       console.error("Failed to fetch meeting data:", error);
       setMeetings([]);
@@ -251,8 +292,12 @@ export default function AdminDashboard() {
         name: item.name || item.nama || "",
         email: item.email || "",
         unitId: item.unitId || item.unit_id || item.unit || "",
+        nipp: item.nipp || "",
         capacity: item.capacity || item.kapasitas || 0,
         location: item.location || item.location || item.lokasi || "",
+        title: item.title || "",
+        content: item.content || "",
+        isActive: item.isActive || false,
       });
     } else if (mode === "delete" && item) {
       // nothing to set in form
@@ -260,16 +305,24 @@ export default function AdminDashboard() {
         name: item.name || item.nama || "",
         email: "",
         unitId: "",
+        nipp: "",
         capacity: 0,
         location: "",
+        title: "",
+        content: "",
+        isActive: true,
       });
     } else {
       setFormData({
         name: "",
         email: "",
         unitId: "",
+        nipp: "",
         capacity: 0,
         location: "",
+        title: "",
+        content: "",
+        isActive: true,
       });
     }
   };
@@ -282,8 +335,12 @@ export default function AdminDashboard() {
       name: "",
       email: "",
       unitId: "",
+      nipp: "",
       capacity: 0,
       location: "",
+      title: "",
+      content: "",
+      isActive: true,
     });
   };
 
@@ -298,6 +355,7 @@ export default function AdminDashboard() {
             name: formData.name,
             email: formData.email,
             unitId: formData.unitId,
+            nipp: formData.nipp,
           });
           toast.success("Karyawan dibuat");
         } else if (activeTab === "room") {
@@ -312,14 +370,27 @@ export default function AdminDashboard() {
             name: formData.name,
           });
           toast.success("Unit dibuat");
+        } else if (activeTab === "tnc") {
+          await createTnc({
+            title: formData.title,
+            content: formData.content,
+            isActive: formData.isActive,
+          });
+          toast.success("Terms & Condition dibuat");
         }
-      } else if (modalMode === "edit" && selectedItem) {
+      } else if (
+        (modalMode === "edit" ||
+          modalMode === "active" ||
+          modalMode === "unactive") &&
+        selectedItem
+      ) {
         if (activeTab === "employee") {
           await updateEmployee({
             id: selectedItem.id,
             name: formData.name,
             email: formData.email,
             unitId: formData.unitId,
+            nipp: formData.nipp,
           });
           toast.success("Karyawan diperbarui");
         } else if (activeTab === "room") {
@@ -336,6 +407,33 @@ export default function AdminDashboard() {
             name: formData.name,
           });
           toast.success("Unit diperbarui");
+        } else if (activeTab === "tnc") {
+          console.log(modalMode, "ini modal mode");
+          if (modalMode === "active") {
+            await updateTnc({
+              id: selectedItem.id,
+              title: selectedItem.title,
+              content: selectedItem.content,
+              isActive: true,
+            });
+            toast.success("Terms & Condition diaktifkan");
+          } else if (modalMode === "unactive") {
+            await updateTnc({
+              id: selectedItem.id,
+              title: selectedItem.title,
+              content: selectedItem.content,
+              isActive: false,
+            });
+            toast.success("Terms & Condition di non-aktifkan");
+          } else {
+            await updateTnc({
+              id: selectedItem.id,
+              title: formData.title,
+              content: formData.content,
+              isActive: formData.isActive,
+            });
+            toast.success("Terms & Condition diperbarui");
+          }
         }
       } else if (modalMode === "delete" && selectedItem) {
         if (activeTab === "employee") {
@@ -347,14 +445,37 @@ export default function AdminDashboard() {
         } else if (activeTab === "unit") {
           await deleteUnit(selectedItem.id);
           toast.success("Unit dihapus");
+        } else if (activeTab === "tnc") {
+          await deleteTnc(selectedItem.id);
+          toast.success("Terms & Condition dihapus");
         }
+      } else if (
+        (modalMode === "approve" || modalMode === "reject") &&
+        selectedItem
+      ) {
+        const userRegistrationRes = await fetchUserRegistrationById(
+          selectedItem.id
+        );
+
+        await updateUserRegistration({
+          id: selectedItem.id,
+          email: selectedItem.email,
+          name: selectedItem.name,
+          password: userRegistrationRes.password,
+          unitId: selectedItem.unit.id,
+          nipp: selectedItem.nipp,
+          status: modalMode === "approve" ? "APPROVED" : "REJECTED",
+        });
+        toast.success(
+          `User berhasil ${modalMode === "approve" ? "di approve" : "di tolak"}`
+        );
       }
 
       await loadData();
       closeModal();
     } catch (error) {
       console.error(error);
-      toast.error(error?.message || "Terjadi kesalahan");
+      toast.error(error?.response.data.message || "Terjadi kesalahan");
     }
   };
 
@@ -380,6 +501,10 @@ export default function AdminDashboard() {
         return unitList;
       case "room":
         return roomList;
+      case "user":
+        return userRegistrationList;
+      case "tnc":
+        return tncList;
       default:
         return [];
     }
@@ -414,6 +539,46 @@ export default function AdminDashboard() {
           </th>
           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
             Location
+          </th>
+          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+            Actions
+          </th>
+        </tr>
+      );
+    } else if (activeTab === "user") {
+      return (
+        <tr className="bg-gray-50">
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+            Name
+          </th>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+            Email
+          </th>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+            NIPP
+          </th>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+            UNIT
+          </th>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+            STATUS
+          </th>
+          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+            Actions
+          </th>
+        </tr>
+      );
+    } else if (activeTab === "tnc") {
+      return (
+        <tr className="bg-gray-50">
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+            Title
+          </th>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+            Content
+          </th>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+            Status
           </th>
           <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
             Actions
@@ -470,6 +635,79 @@ export default function AdminDashboard() {
           <td className="px-4 py-3 text-sm text-gray-900">{item.location}</td>
           <td className="px-4 py-3 text-sm text-center">
             <div className="flex justify-center space-x-2">
+              <button
+                onClick={() => openModal("edit", item)}
+                className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg"
+              >
+                <Edit size={16} />
+              </button>
+              <button
+                onClick={() => openModal("delete", item)}
+                className="p-2 text-red-600 hover:bg-red-100 rounded-lg"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </td>
+        </tr>
+      );
+    } else if (activeTab === "user") {
+      return (
+        <tr key={item.id} className="hover:bg-gray-50">
+          <td className="px-4 py-3 text-sm text-gray-900">{item.name}</td>
+          <td className="px-4 py-3 text-sm text-gray-900">{item.email}</td>
+          <td className="px-4 py-3 text-sm text-gray-900">{item.nipp}</td>
+          <td className="px-4 py-3 text-sm text-gray-900">{item.unit.name}</td>
+          <td className="px-4 py-3 text-sm text-gray-900">
+            {item.status.charAt(0) + item.status.slice(1).toLowerCase()}
+          </td>
+          <td className="px-4 py-3 text-sm text-center">
+            {item.status === "PENDING" ? (
+              <div className="flex justify-center space-x-2">
+                <button
+                  onClick={() => openModal("approve", item)}
+                  className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={() => openModal("reject", item)}
+                  className="p-2 text-red-600 hover:bg-red-100 rounded-lg"
+                >
+                  Reject
+                </button>
+              </div>
+            ) : (
+              <p className="text-black">-</p>
+            )}
+          </td>
+        </tr>
+      );
+    } else if (activeTab === "tnc") {
+      return (
+        <tr key={item.id} className="hover:bg-gray-50">
+          <td className="px-4 py-3 text-sm text-gray-900">{item.title}</td>
+          <td className="px-4 py-3 text-sm text-gray-900">{item.content}</td>
+          <td className="px-4 py-3 text-sm text-gray-900">
+            {item.isActive ? "Aktif" : "Tidak Aktif"}
+          </td>
+          <td className="px-4 py-3 text-sm text-center">
+            <div className="flex justify-center space-x-2">
+              {item.isActive === false ? (
+                <button
+                  onClick={() => openModal("active", item)}
+                  className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg"
+                >
+                  Aktifkan
+                </button>
+              ) : (
+                <button
+                  onClick={() => openModal("unactive", item)}
+                  className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg"
+                >
+                  Non-Aktifkan
+                </button>
+              )}
               <button
                 onClick={() => openModal("edit", item)}
                 className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg"
@@ -654,7 +892,7 @@ export default function AdminDashboard() {
                   {tabs.find((t) => t.id === activeTab)?.label} Management
                 </h1>
 
-                {activeTab !== "meeting" ? (
+                {activeTab !== "meeting" && activeTab !== "user" ? (
                   <button
                     onClick={() => openModal("add")}
                     className="flex items-center space-x-2 px-2 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -1005,7 +1243,16 @@ export default function AdminDashboard() {
               <h3 className="text-md font-semibold text-black">
                 {modalMode === "delete"
                   ? `Delete ${tabs.find((t) => t.id === activeTab)?.label}`
-                  : `${modalMode === "add" ? "Add" : "Edit"} ${
+                  : modalMode === "add" || modalMode === "edit"
+                  ? `${modalMode === "add" ? "Add" : "Edit"} ${
+                      tabs.find((t) => t.id === activeTab)?.label
+                    } `
+                  : modalMode === "approve" || modalMode === "reject"
+                  ? `${modalMode === "approve" ? "Approve" : "Reject"} ${
+                      tabs.find((t) => t.id === activeTab)?.label
+                    } Account`
+                  : (modalMode === "active" || modalMode === "unactive") &&
+                    `${modalMode === "active" ? "Aktifkan" : "Non-Aktifkan"} ${
                       tabs.find((t) => t.id === activeTab)?.label
                     }`}
               </h3>
@@ -1037,6 +1284,66 @@ export default function AdminDashboard() {
                     className="px-2 py-1 cursor-pointer bg-red-600 text-sm text-white rounded-lg hover:bg-red-700"
                   >
                     Delete
+                  </button>
+                </div>
+              </div>
+            ) : modalMode === "approve" || modalMode === "reject" ? (
+              <div className="p-4">
+                <div className="flex text-black items-center space-x-3 mb-4">
+                  {modalMode === "reject" && (
+                    <AlertTriangle className="text-red-500" size={16} />
+                  )}
+                  <p className="text-sm">
+                    Are you sure to {modalMode} this {activeTab}?
+                  </p>
+                </div>
+                <div className="flex space-x-3 justify-end">
+                  <button
+                    onClick={closeModal}
+                    className="px-2 py-1 cursor-pointer text-gray-600 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    className={`px-2 py-1 cursor-pointer text-sm text-white rounded-lg ${
+                      modalMode === "approve"
+                        ? " bg-green-600 hover:bg-green-700"
+                        : "bg-red-600 hover:bg-red-700"
+                    }`}
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            ) : modalMode === "active" || modalMode === "unactive" ? (
+              <div className="p-4">
+                <div className="flex text-black items-center space-x-3 mb-4">
+                  {modalMode === "reject" && (
+                    <AlertTriangle className="text-red-500" size={16} />
+                  )}
+                  <p className="text-sm">
+                    Are you sure to{" "}
+                    {modalMode === "active" ? "activate" : "deactive"} this{" "}
+                    {activeTab}?
+                  </p>
+                </div>
+                <div className="flex space-x-3 justify-end">
+                  <button
+                    onClick={closeModal}
+                    className="px-2 py-1 cursor-pointer text-gray-600 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    className={`px-2 py-1 cursor-pointer text-sm text-white rounded-lg ${
+                      modalMode === "active"
+                        ? " bg-green-600 hover:bg-green-700"
+                        : "bg-red-600 hover:bg-red-700"
+                    }`}
+                  >
+                    Confirm
                   </button>
                 </div>
               </div>
@@ -1072,6 +1379,20 @@ export default function AdminDashboard() {
                         value={formData.email}
                         onChange={(e) =>
                           setFormData((p) => ({ ...p, email: e.target.value }))
+                        }
+                        className="w-full px-3 text-black py-2 text-sm border border-gray-300 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        NIPP
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.nipp}
+                        onChange={(e) =>
+                          setFormData((p) => ({ ...p, nipp: e.target.value }))
                         }
                         className="w-full px-3 text-black py-2 text-sm border border-gray-300 rounded-xl"
                       />
@@ -1170,7 +1491,7 @@ export default function AdminDashboard() {
                       />
                     </div>
                   </>
-                ) : (
+                ) : activeTab === "unit" ? (
                   // unit
                   <>
                     <div>
@@ -1188,6 +1509,68 @@ export default function AdminDashboard() {
                       />
                     </div>
                   </>
+                ) : (
+                  activeTab === "tnc" && (
+                    // unit
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Title
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.title}
+                          onChange={(e) =>
+                            setFormData((p) => ({
+                              ...p,
+                              title: e.target.value,
+                            }))
+                          }
+                          className="w-full text-black text-sm px-3 py-2 border border-gray-300 rounded-xl"
+                        />
+                      </div>
+
+                      <div className="mt-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Content
+                        </label>
+                        <textarea
+                          type="text"
+                          required
+                          value={formData.content}
+                          onChange={(e) =>
+                            setFormData((p) => ({
+                              ...p,
+                              content: e.target.value,
+                            }))
+                          }
+                          className="w-full text-black text-sm px-3 py-2 border border-gray-300 rounded-xl"
+                        />
+                      </div>
+
+                      <div className="mt-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Status
+                        </label>
+                        <select
+                          required
+                          value={String(formData.isActive)} // ✅ ubah ke string
+                          onChange={(e) =>
+                            setFormData((p) => ({
+                              ...p,
+                              isActive: e.target.value === "true", // ✅ convert ke boolean lagi
+                            }))
+                          }
+                          className="w-full text-black px-3 py-2 text-sm border border-gray-300 rounded-xl"
+                        >
+                          <option value="">-- Pilih Status --</option>
+                          <option value="true">Aktif</option>
+                          <option value="false">Tidak Aktif</option>
+                        </select>
+                      </div>
+                    </>
+                  )
                 )}
 
                 <div className="flex justify-end space-x-3 pt-4">

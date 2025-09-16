@@ -29,96 +29,6 @@ function convertTimeToSeconds(timeString) {
   }
 }
 
-// Helper functions untuk device dan location info
-async function getDeviceInfo(req) {
-  const userAgent = req.headers["user-agent"] || "";
-
-  let browser = "Unknown Browser";
-  let os = "Unknown OS";
-  let device = "Desktop Computer";
-
-  // Browser detection
-  if (userAgent.includes("Edg")) browser = "Microsoft Edge";
-  else if (userAgent.includes("Chrome")) browser = "Google Chrome";
-  else if (userAgent.includes("Firefox")) browser = "Mozilla Firefox";
-  else if (userAgent.includes("Safari") && !userAgent.includes("Chrome"))
-    browser = "Safari";
-  else if (userAgent.includes("Opera")) browser = "Opera";
-
-  // OS detection
-  if (userAgent.includes("Windows NT")) os = "Windows";
-  else if (userAgent.includes("Mac OS X")) os = "macOS";
-  else if (userAgent.includes("Linux") && !userAgent.includes("Android"))
-    os = "Linux";
-  else if (userAgent.includes("Android")) os = "Android";
-  else if (userAgent.includes("iPhone OS") || userAgent.includes("iPad"))
-    os = "iOS";
-
-  // Device detection
-  if (userAgent.includes("Mobile") && !userAgent.includes("iPad"))
-    device = "Mobile Device";
-  else if (userAgent.includes("iPad") || userAgent.includes("Tablet"))
-    device = "Tablet";
-  else device = "Desktop Computer";
-
-  return { browser, os, device };
-}
-
-async function getLocationInfo(req) {
-  try {
-    // Get real IP address (considering proxies)
-    const ip =
-      req.headers["x-forwarded-for"] ||
-      req.headers["x-real-ip"] ||
-      req.connection.remoteAddress ||
-      req.socket.remoteAddress ||
-      (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
-      "127.0.0.1";
-
-    const realIp = ip.split(",")[0].trim();
-
-    // Skip localhost/private IPs
-    if (
-      realIp === "127.0.0.1" ||
-      realIp === "::1" ||
-      realIp.startsWith("192.168.") ||
-      realIp.startsWith("10.")
-    ) {
-      return {
-        ip: "Local Network",
-        city: "Local",
-        region: "Local Network",
-        country: "Indonesia",
-      };
-    }
-
-    // Use free IP geolocation service
-    const response = await fetch(
-      `http://ip-api.com/json/${realIp}?fields=country,regionName,city,status`
-    );
-    const data = await response.json();
-
-    if (data.status === "success") {
-      return {
-        ip: realIp,
-        city: data.city || "Unknown City",
-        region: data.regionName || "Unknown Region",
-        country: data.country || "Unknown Country",
-      };
-    } else {
-      throw new Error("Geolocation failed");
-    }
-  } catch (error) {
-    console.error("Error getting location info:", error);
-    return {
-      ip: "Unknown",
-      city: "Unknown City",
-      region: "Unknown Region",
-      country: "Indonesia",
-    };
-  }
-}
-
 export async function POST(req) {
   try {
     const body = await req.json();
@@ -157,6 +67,36 @@ export async function POST(req) {
     }
 
     if (!user) {
+      let userRegistration = await prisma.userRegistration.findUnique({
+        where: { email: identifier },
+      });
+      if (!userRegistration) {
+        userRegistration = await prisma.userRegistration.findUnique({
+          where: { nipp: identifier },
+        });
+      }
+      if (userRegistration) {
+        if (userRegistration.status === "PENDING") {
+          return new Response(
+            JSON.stringify({
+              message:
+                "Akun dengan NIPP / Email tersebut belum divalidasi oleh administrator sistem!",
+            }),
+            { status: 403, headers: { "Content-Type": "application/json" } }
+          );
+        } else if (userRegistration.status === "REJECTED") {
+          return new Response(
+            JSON.stringify({
+              message:
+                "Pendaftaran akun anda ditolak sehingga akun dengan NIPP / Email ini tidak valid. Silakan hubungi administrator sistem untuk informasi lebih lanjut.",
+            }),
+            { status: 403, headers: { "Content-Type": "application/json" } }
+          );
+        }
+      }
+    }
+
+    if (!user) {
       return new Response(
         JSON.stringify({
           message: "Tidak ditemukan akun dengan NIPP / Email tersebut!",
@@ -164,6 +104,8 @@ export async function POST(req) {
         { status: 404, headers: { "Content-Type": "application/json" } }
       );
     }
+
+    console.log(user);
 
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
@@ -194,13 +136,9 @@ export async function POST(req) {
     });
 
     try {
-      // Get device and location information
-      const deviceInfo = await getDeviceInfo(req);
-      const locationInfo = await getLocationInfo(req);
-
       await sendEmail({
         from: `"Admin KAI Rooms" <${process.env.EMAIL_USER}>`,
-        to: email,
+        to: user.email,
         subject: "Login Berhasil - KAI Rooms",
         html: `
       <!DOCTYPE html>
@@ -303,46 +241,16 @@ export async function POST(req) {
                               </td>
                               <td style="vertical-align: top; padding-left: 10px;">
                                 <div style="font-weight: bold; color: #1e293b; font-size: 14px;">Email</div>
-                                <div style="color: #64748b; font-size: 13px; word-break: break-all;">${email}</div>
-                              </td>
-                            </tr>
-                          </table>
-
-                          <!-- Device -->
-                          <table role="presentation" style="width: 100%; margin-bottom: 12px; padding: 8px 0; border-bottom: 1px solid #e2e8f0;">
-                            <tr>
-                              <td style="width: 40px; vertical-align: top;">
-                                <div style="background: #e0e7ff; color: #6366f1; padding: 6px; border-radius: 6px; font-size: 14px; text-align: center; width: 24px;">📱</div>
-                              </td>
-                              <td style="vertical-align: top; padding-left: 10px;">
-                                <div style="font-weight: bold; color: #1e293b; font-size: 14px;">Perangkat</div>
-                                <div style="color: #64748b; font-size: 13px;">${
-                                  deviceInfo.browser
-                                } di ${deviceInfo.os}</div>
-                                <div style="color: #64748b; font-size: 12px; opacity: 0.8;">${
-                                  deviceInfo.device
+                                <div style="color: #64748b; font-size: 13px; word-break: break-all;">${
+                                  user.email
                                 }</div>
                               </td>
                             </tr>
                           </table>
 
-                          <!-- Location -->
-                          <table role="presentation" style="width: 100%; padding: 8px 0;">
-                            <tr>
-                              <td style="width: 40px; vertical-align: top;">
-                                <div style="background: #dcfce7; color: #16a34a; padding: 6px; border-radius: 6px; font-size: 14px; text-align: center; width: 24px;">📍</div>
-                              </td>
-                              <td style="vertical-align: top; padding-left: 10px;">
-                                <div style="font-weight: bold; color: #1e293b; font-size: 14px;">Lokasi</div>
-                                <div style="color: #64748b; font-size: 13px;">${
-                                  locationInfo.city
-                                }, ${locationInfo.region}</div>
-                                <div style="color: #64748b; font-size: 12px; opacity: 0.8;">IP: ${
-                                  locationInfo.ip
-                                }</div>
-                              </td>
-                            </tr>
-                          </table>
+                         
+
+                        
                         </td>
                       </tr>
                     </table>

@@ -110,24 +110,39 @@ export async function POST(req) {
   try {
     const body = await req.json();
     console.log(body);
-    const { name, email, unitId } = body;
+    const { name, email, unitId, nipp } = body;
 
-    if ((!name || !email, !unitId)) {
+    if ((!name || !email, !unitId || !nipp)) {
       return new Response(JSON.stringify({ message: "Isi semua kolom!" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    const existingKodeRecord = await prisma.employee.findUnique({
+    let existingKodeRecord = await prisma.employee.findUnique({
       where: {
         email,
+      },
+    });
+    if (existingKodeRecord) {
+      return new Response(
+        JSON.stringify({ message: "Email tersebut sudah dipakai!" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    existingKodeRecord = await prisma.employee.findUnique({
+      where: {
+        nipp,
       },
     });
 
     if (existingKodeRecord) {
       return new Response(
-        JSON.stringify({ message: "Email tersebut sudah dipakai!" }),
+        JSON.stringify({ message: "NIPP tersebut sudah dipakai!" }),
         {
           status: 400,
           headers: { "Content-Type": "application/json" },
@@ -140,6 +155,7 @@ export async function POST(req) {
         name,
         email,
         unitId,
+        nipp,
       },
     });
 
@@ -168,10 +184,12 @@ export async function POST(req) {
 export async function PATCH(req) {
   try {
     const body = await req.json();
-    const { id, name, email, unitId } = body;
+    const { id, name, email, unitId, nipp } = body;
+
+    console.log(body);
 
     // Validate required fields
-    if (!id || !name || !email || !unitId) {
+    if (!id || !name || !email || !unitId || !nipp) {
       return new Response(JSON.stringify({ message: "Data tidak valid!" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
@@ -192,7 +210,7 @@ export async function PATCH(req) {
       );
     }
 
-    const existingKodeRecord = await prisma.employee.findUnique({
+    let existingKodeRecord = await prisma.employee.findUnique({
       where: {
         email,
       },
@@ -207,10 +225,25 @@ export async function PATCH(req) {
         }
       );
     }
+    existingKodeRecord = await prisma.employee.findUnique({
+      where: {
+        nipp,
+      },
+    });
+
+    if (existingKodeRecord && existingKodeRecord.id !== id) {
+      return new Response(
+        JSON.stringify({ message: "NIPP tersebut sudah ada yg pakai!" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
 
     const employee = await prisma.employee.update({
       where: { id },
-      data: { name, email, unitId },
+      data: { name, email, unitId, nipp },
     });
 
     return new Response(

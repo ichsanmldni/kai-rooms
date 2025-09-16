@@ -121,7 +121,6 @@ const KaiRoomsApp = () => {
 
   const [selectedTimeSlot, setSelectedTimeSlot] = useState(null);
 
-  console.log("ini data rooms", dataRoomsToday);
   const [formDataBookingRoom, setFormDataBookingRoom] = useState({
     penyelenggara: "",
     namaRapat: "",
@@ -168,15 +167,6 @@ const KaiRoomsApp = () => {
       key: startTime,
     });
   }
-
-  console.log(
-    "ini nearest",
-    nearestMeeting,
-    "ini today",
-    todayMeetings,
-    "ini upcomingMeetings",
-    upcomingMeetings
-  );
 
   function getStatus(start, end, now, forNearest = false) {
     if (!end) {
@@ -228,8 +218,6 @@ const KaiRoomsApp = () => {
 
     const now = new Date();
     const nowWIB = new Date(now.getTime() + wibOffsetMs);
-
-    console.log("ini date today in wib", date);
 
     return (
       wibDate.getUTCFullYear() === nowWIB.getUTCFullYear() &&
@@ -375,7 +363,6 @@ const KaiRoomsApp = () => {
       async function loadMeetingsUser() {
         try {
           const data = await fetchMeetingList(userData.id);
-          console.log("ini data raw meetingss", data);
           setDataMeetingsUser(data);
         } catch (error) {
           alert(error.message);
@@ -393,14 +380,10 @@ const KaiRoomsApp = () => {
     );
   }, [dataNotification]);
 
-  console.log("ini data employee", employeeData);
-
   const logoutHandle = () => {
     document.cookie = "authKAI=; max-age=0; path=/;";
     window.location.reload();
   };
-
-  console.log("ini data notifi", dataNotification);
 
   async function fetchMe() {
     if (typeof window === "undefined") return null;
@@ -422,8 +405,6 @@ const KaiRoomsApp = () => {
     }
   }
 
-  console.log("ini timeslots", splitSlotsByMeetings(selectedMeeting));
-
   useEffect(() => {
     async function loadUser() {
       try {
@@ -436,7 +417,6 @@ const KaiRoomsApp = () => {
     async function loadEmployee() {
       try {
         const data = await fetchEmployeeList();
-        console.log(data, "Ini employe list");
 
         const grouped = data.reduce((acc, pegawai) => {
           const unit = pegawai.unit.name || "Tanpa Unit";
@@ -478,8 +458,6 @@ const KaiRoomsApp = () => {
       try {
         const data = await fetchRoomList(); // pastikan ini include meetings
         const transformed = transformRooms(data);
-        console.log("ini data rooms asli", data);
-        console.log("inii trans", transformed);
         setRoomsOptions(data);
         setDataRoomsToday(transformed);
       } catch (error) {
@@ -556,8 +534,6 @@ const KaiRoomsApp = () => {
         }
       }
 
-      console.log("refined", refinedSlots);
-
       return refinedSlots;
     }
 
@@ -577,8 +553,6 @@ const KaiRoomsApp = () => {
     loadMeetingsAll();
   }, []);
 
-  console.log("ini user data", userData);
-
   useEffect(() => {
     async function loadRooms() {
       try {
@@ -588,8 +562,6 @@ const KaiRoomsApp = () => {
             data,
             formDataBookingRoom
           );
-        console.log("ini data rooms asli", data);
-        console.log("inii trans selected tanggal", transformedSelectedTanggal);
         setDataRoomsSelectedTanggal(transformedSelectedTanggal);
       } catch (error) {
         alert(error.message);
@@ -756,8 +728,6 @@ const KaiRoomsApp = () => {
     setNearestMeeting(nearest);
   }, [dataMeetingsUser]);
 
-  console.log("ini data rooms selected tanggal", dataRoomsSelectedTanggal);
-
   // useEffect(() => {
   //   const timer = setInterval(() => setCurrentTime(new Date()), 1000);
   //   return () => clearInterval(timer);
@@ -814,8 +784,6 @@ const KaiRoomsApp = () => {
       [e.target.name]: e.target.value,
     });
   };
-
-  console.log("inih form", formDataBookingRoom);
 
   const openConfirmationModal = ({
     type = "booking",
@@ -941,8 +909,6 @@ const KaiRoomsApp = () => {
       });
       setIsLoadingSubmit(false);
 
-      console.log("Form submitted:", meetingRes);
-
       toast.success(
         `${
           formDataBookingRoom.jenisRapat === "Online"
@@ -1019,8 +985,6 @@ const KaiRoomsApp = () => {
       });
       setIsLoadingEdit(false);
 
-      console.log("Form submitted:", meetingRes);
-
       toast.success(
         `${
           formDataBookingRoom.jenisRapat === "Online"
@@ -1078,8 +1042,6 @@ const KaiRoomsApp = () => {
       const meetingRes = await deleteMeeting(meeting.id);
       setIsLoadingDelete(false);
 
-      console.log("Form submitted:", meetingRes);
-
       toast.success(
         `${
           formDataBookingRoom.jenisRapat === "Online"
@@ -1126,8 +1088,6 @@ const KaiRoomsApp = () => {
     }
   };
 
-  console.log("ini form data", formDataBookingRoom);
-
   const handleSearch = () => {
     const results = todayMeetings.filter((meeting) =>
       meeting.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -1161,7 +1121,6 @@ const KaiRoomsApp = () => {
 
     setSelectedMeeting(selected);
 
-    console.log("ini selected", fullMeeting);
     if (!selected) return;
 
     const startDate = toWIBDate(selected.startTime);
@@ -1230,7 +1189,6 @@ const KaiRoomsApp = () => {
 
     setSelectedMeeting(selected);
 
-    console.log("ini selected", fullMeeting);
     if (!selected) return;
 
     const startDate = toWIBDate(selected.startTime);
@@ -1242,7 +1200,6 @@ const KaiRoomsApp = () => {
 
   const handleShowDetail = (meeting) => {
     const fullMeeting = dataMeetingsAll.find((m) => m.id === meeting.id);
-    console.log("ini selected cuy", fullMeeting);
     if (fullMeeting) {
       setSelectedMeeting(fullMeeting);
     } else {
@@ -1276,8 +1233,6 @@ const KaiRoomsApp = () => {
     }
     setShowDetailPopup(true);
   };
-
-  console.log("ini selected meeting detail", selectedMeeting);
 
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -1336,13 +1291,6 @@ const KaiRoomsApp = () => {
   };
 
   const handleSlotClick = (room, timeSlot) => {
-    console.log(
-      "ini meeting raw",
-      room,
-      timeSlot,
-      room?.meetings?.[timeSlot.start]
-    );
-
     if (room?.meetings?.[timeSlot.start]) {
       // Kalau sudah ada meeting → tampilkan detail, bukan booking baru
       handleShowDetail(room?.meetings?.[timeSlot.start]);
@@ -1390,13 +1338,6 @@ const KaiRoomsApp = () => {
     }, 50); // step 2
   };
   const handleSlotClickVisualization = (room, timeSlot) => {
-    console.log(
-      "ini meeting raw",
-      room,
-      timeSlot,
-      room?.meetings?.[timeSlot.start]
-    );
-
     setSelectedRoom(room);
     setFormDataBookingRoom((prev) => ({
       ...prev,
@@ -1421,12 +1362,7 @@ const KaiRoomsApp = () => {
         setTimeout(() => {
           setFormDataBookingRoom((prev) => ({
             ...prev,
-            penyelenggara: "",
-            namaRapat: "",
-
             linkMeet: "",
-            catatan: "",
-            deskripsi: "",
             mulaiSekarang: false,
             pesertaRapat: [employeeData.id],
             kirimUndanganEmail: false,
@@ -1652,7 +1588,6 @@ const KaiRoomsApp = () => {
     typePopUpBook, // "room" | "meeting" | "edit meeting"
     currentMeeting, // { startTime, endTime } kalau edit
   }) => {
-    console.log("ini current meeting", currentMeeting);
     const candidates = buildDaySlots(STEP_MIN, { excludeEnd: true });
 
     // kalau online → gak ada blocking
@@ -1797,13 +1732,11 @@ const KaiRoomsApp = () => {
     const now = new Date();
 
     const makeDate = (hhmm, base = selectedDate) => {
-      console.log("ini hahaemem", hhmm);
       const [h, m] = hhmm.split(":").map(Number);
       const d = new Date(base);
       d.setHours(h, m, 0, 0);
       return d;
     };
-    console.log(timeSlots);
 
     function formatTime(d, isEnd = false) {
       let hh = d.getHours();
@@ -1814,7 +1747,6 @@ const KaiRoomsApp = () => {
     }
 
     for (const { start: slotStart, end: slotEnd } of timeSlots) {
-      console.log(slotStart, slotEnd);
       let slotStartDate = makeDate(slotStart);
       let slotEndDate = makeDate(slotEnd);
 
@@ -1890,13 +1822,10 @@ const KaiRoomsApp = () => {
       }
     }
 
-    console.log("ini todat", dataRoomsToday, refinedSlots);
     return refinedSlots;
   }
 
   const isFormValid = (formData) => {
-    console.log("ini form data", formData);
-
     // Field wajib dasar
     if (
       !formData.penyelenggara ||
@@ -2904,7 +2833,6 @@ const KaiRoomsApp = () => {
                                 {splitSlotsByMeetings(timeSlots, room)
                                   .flatMap((timeSlot, index) => {
                                     const meeting = room.meetings[timeSlot.key];
-                                    console.log("ini meeting", meeting);
                                     const isSpanned = isSlotSpanned(
                                       room,
                                       timeSlot.key
