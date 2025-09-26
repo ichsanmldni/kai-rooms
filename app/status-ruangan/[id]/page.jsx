@@ -1000,7 +1000,7 @@ export default function StatusRuanganDetail() {
           {!currentMeeting &&
             nextMeeting &&
             getTimeUntilNextInMinutes(nextMeeting) <= 10 && (
-              <div className="">
+              <div className="w-full max-w-6xl">
                 {/* Header dengan animasi */}
                 <div className="text-center mb-8 animate-bounce-slow">
                   <div className="inline-flex items-center space-x-2 bg-amber-500/10 px-4 py-2 rounded-xl mb-4">
@@ -1165,10 +1165,10 @@ export default function StatusRuanganDetail() {
         </div>
       ) : (
         /* Regular Schedule Display */
-        <div className="h-full">
-          <div className="bg-white/70 mx-4 mt-4 backdrop-blur-xl rounded-2xl border border-white/20 shadow-sm">
-            <div className="p-6">
-              <div className="flex items-start justify-between mb-4">
+        <div className="container h-full p-4 space-y-4 mx-auto">
+          <div className="bg-white/70 mx-auto backdrop-blur-xl rounded-2xl border border-white/20 shadow-sm  ">
+            <div className="p-6 ">
+              <div className="flex items-start justify-between mb-4 ">
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <h1 className="text-xl font-bold text-[#1b68b0]">
@@ -1300,7 +1300,7 @@ export default function StatusRuanganDetail() {
 
           {/* Main Content */}
           <div className="flex-1 overflow-auto">
-            <div className="container mx-auto p-4">
+            <div className="container mx-auto">
               <div className="grid grid-cols-1 gap-6">
                 {/* Schedule Grid */}
                 <div className="xl:col-span-2 space-y-4">
