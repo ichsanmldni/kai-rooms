@@ -142,10 +142,10 @@ const KaiRoomsApp = () => {
   );
 
   function getStatus(start, end, now, readable = false) {
-    if (end < now) return readable ? "Selesai" : "selesai";
+    if (end < now) return readable ? "Selesai" : "Selesai";
     if (start <= now && end >= now)
-      return readable ? "Berlangsung" : "berlangsung";
-    return readable ? "Mendatang" : "mendatang";
+      return readable ? "Berlangsung" : "Berlangsung";
+    return readable ? "Mendatang" : "Mendatang";
   }
 
   useEffect(() => {
@@ -302,9 +302,9 @@ const KaiRoomsApp = () => {
 
   function getMeetingStatus(start, end) {
     const now = new Date();
-    if (now < start) return "mendatang";
-    if (now >= start && now <= end) return "berlangsung";
-    return "selesai";
+    if (now < start) return "Mendatang";
+    if (now >= start && now <= end) return "Berlangsung";
+    return "Selesai";
   }
 
   useEffect(() => {
@@ -652,23 +652,6 @@ const KaiRoomsApp = () => {
     }
   };
 
-  const renderStatus = (status) => {
-    const statusConfig = {
-      ongoing: { text: "Berlangsung", color: "bg-green-500", icon: PlayCircle },
-      upcoming: { text: "Mendatang", color: "bg-blue-500", icon: Clock },
-      completed: { text: "Selesai", color: "bg-gray-400", icon: CheckCircle },
-    };
-
-    const config = statusConfig[status] || statusConfig.upcoming;
-
-    return (
-      <div className="flex items-center space-x-2">
-        <div className={`w-2 h-2 rounded-full ${config.color}`}></div>
-        <span className="text-xs font-medium text-gray-700">{config.text}</span>
-      </div>
-    );
-  };
-
   const filteredMeetings = todayMeetings.filter((meeting) => {
     if (activeFilter === "all") return true;
     return meeting.status === activeFilter;
@@ -823,11 +806,11 @@ const KaiRoomsApp = () => {
     const endHour = slotHour + meeting.duration;
 
     if (currentHour >= slotHour && currentHour < endHour) {
-      return "ongoing";
+      return "Berlangsung";
     } else if (currentHour < slotHour) {
-      return "upcoming";
+      return "Mendatang";
     } else {
-      return "finished";
+      return "Selesai";
     }
   };
 
@@ -863,15 +846,15 @@ const KaiRoomsApp = () => {
     };
 
     switch (status) {
-      case "ongoing":
+      case "Berlangsung":
         return `bg-green-100 border-2 ${
           priorityColors[meeting?.priority]
         } text-green-800`;
-      case "upcoming":
+      case "Mendatang":
         return `bg-blue-100 border-2 ${
           priorityColors[meeting?.priority]
         } text-blue-800`;
-      case "finished":
+      case "Selesai":
         return `bg-gray-100 border-2 ${
           priorityColors[meeting?.priority]
         } text-gray-600`;
@@ -1061,14 +1044,15 @@ const KaiRoomsApp = () => {
         </header>
 
         {/* Jadwal Kalender */}
-        <div className="p-8">
-          <div className="max-w-5xl mx-auto">
+        <div className="p-8 bg-gray-50">
+          <div className="max-w-6xl mx-auto">
             <div className="flex flex-col md:flex-row gap-8">
               {/* Kalender */}
-              <div className="bg-white rounded-xl p-6 flex-1 shadow-lg">
-                <div className="flex items-center text-black justify-between mb-6">
+              <div className="bg-white rounded-lg p-6 flex-1 shadow-md border border-gray-200">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
                   <button
-                    className="bg-[#ff7b00] text-white text-lg px-3 py-2 rounded-md cursor-pointer transition hover:bg-[#e06900] border-none"
+                    className="px-4 py-1 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-xl cursor-pointer"
                     onClick={() =>
                       setCalendarMonth(
                         new Date(
@@ -1082,7 +1066,7 @@ const KaiRoomsApp = () => {
                     ‹
                   </button>
 
-                  <h2 className="m-0 text-xl text-gray-900 font-bold">
+                  <h2 className="text-lg font-semibold text-gray-900">
                     {calendarMonth.toLocaleString("id-ID", {
                       month: "long",
                       year: "numeric",
@@ -1090,6 +1074,7 @@ const KaiRoomsApp = () => {
                   </h2>
 
                   <button
+                    className="px-4 py-1 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-xl cursor-pointer"
                     onClick={() =>
                       setCalendarMonth(
                         new Date(
@@ -1099,92 +1084,82 @@ const KaiRoomsApp = () => {
                         )
                       )
                     }
-                    className="bg-[#ff7b00] text-white text-lg px-3 py-2 rounded-md cursor-pointer transition hover:bg-[#e06900] border-none"
                   >
                     ›
                   </button>
                 </div>
-                {/* Kalender grid */}
-                <div>
-                  <div className="grid grid-cols-7 gap-2 mb-2">
-                    {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map(
-                      (d) => (
+
+                {/* Days Header */}
+                <div className="grid grid-cols-7 text-xs font-medium text-gray-500 uppercase mb-2">
+                  {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map(
+                    (d) => (
+                      <div key={d} className="text-center py-2">
+                        {d}
+                      </div>
+                    )
+                  )}
+                </div>
+
+                {/* Calendar Grid */}
+                {/* Calendar Grid */}
+                <div className="grid grid-cols-7 gap-1">
+                  {(() => {
+                    const year = calendarMonth.getFullYear();
+                    const month = calendarMonth.getMonth();
+                    const firstDay = new Date(year, month, 1);
+                    const lastDay = new Date(year, month + 1, 0);
+                    const daysInMonth = lastDay.getDate();
+                    const startDay = (firstDay.getDay() + 6) % 7;
+
+                    const days = [];
+                    for (let i = 0; i < startDay; i++) days.push(null);
+                    for (let d = 1; d <= daysInMonth; d++) days.push(d);
+
+                    return days.map((day, idx) => {
+                      let isSelected = false;
+                      if (day) {
+                        const [selYear, selMonth, selDay] = selectedDate
+                          .split("-")
+                          .map(Number);
+                        isSelected =
+                          selYear === year &&
+                          selMonth - 1 === month &&
+                          selDay === day;
+                      }
+                      return (
                         <div
-                          key={d}
-                          className="text-center font-semibold text-gray-700 py-3 text-sm"
+                          key={idx}
+                          onClick={() => day && handleCalendarDayClick(day)}
+                          className={[
+                            "flex items-center justify-center rounded-md min-h-[40px] text-sm transition select-none",
+                            day
+                              ? isSelected
+                                ? "bg-orange-500 text-white font-semibold " // tanggal aktif = orange
+                                : "bg-gray-50 hover:bg-blue-50 text-gray-800 cursor-pointer" // tanggal lain = abu, hover biru
+                              : "bg-transparent cursor-default",
+                          ].join(" ")}
                         >
-                          {d}
+                          {day || ""}
                         </div>
-                      )
-                    )}
-                  </div>
-                  <div className="grid grid-cols-7 gap-2 bg-transparent">
-                    {(() => {
-                      // Generate days for current month
-                      const year = calendarMonth.getFullYear();
-                      const month = calendarMonth.getMonth();
-
-                      const firstDay = new Date(year, month, 1);
-                      const lastDay = new Date(year, month + 1, 0);
-                      const daysInMonth = lastDay.getDate();
-                      const startDay = (firstDay.getDay() + 6) % 7; // Senin = 0
-
-                      const days = [];
-                      for (let i = 0; i < startDay; i++) days.push(null);
-                      for (let d = 1; d <= daysInMonth; d++) days.push(d);
-
-                      return days.map((day, idx) => {
-                        let isSelected = false;
-                        if (day) {
-                          const [selYear, selMonth, selDay] = selectedDate
-                            .split("-")
-                            .map(Number);
-                          const thisDate = new Date(year, month, day);
-                          // selectedDate bentuknya "YYYY-MM-DD"
-                          isSelected =
-                            day &&
-                            selYear === year &&
-                            selMonth - 1 === month && // karena bulan di JS 0-based
-                            selDay === day;
-                        }
-
-                        return (
-                          <div
-                            key={idx}
-                            className={[
-                              "flex items-center justify-center rounded-lg border-2 transition-all min-h-[45px] text-base cursor-pointer",
-                              day
-                                ? isSelected
-                                  ? "bg-[#ff7b00] text-white font-bold border-[#e06900]" // active state
-                                  : "bg-[#f8f9fa] hover:bg-[#eaeaea] text-gray-900" // hover only if not selected
-                                : "bg-transparent cursor-default",
-                              isSelected ? "" : "border-transparent",
-                            ]
-                              .filter(Boolean)
-                              .join(" ")}
-                            onClick={() => handleCalendarDayClick(day)}
-                          >
-                            {day || ""}
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
 
               {/* Events */}
-              <div className="bg-white rounded-xl flex-1 max-w-md h-[500px] shadow-lg relative overflow-hidden">
-                {/* Header sticky dengan backdrop yang solid dan shadow */}
-                <div className="sticky top-0 bg-white px-6 pt-6 pb-3 z-30">
-                  <h3 className="text-gray-900 text-lg font-bold">Events</h3>
+              <div className="bg-white rounded-lg flex-1 max-w-md h-[500px] shadow-md border border-gray-200 overflow-hidden">
+                {/* Header */}
+                <div className="sticky top-0 bg-white px-6 pt-6 pb-3 border-b border-gray-200 z-30">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Agenda Rapat
+                  </h3>
                 </div>
 
-                {/* Container untuk scrollable content */}
-                <div className="h-[calc(100%-80px)] overflow-y-auto px-6">
-                  {/* Subheader sticky dengan backdrop yang solid */}
-                  <div className="sticky top-0 bg-white pt-3 pb-3 mb-4 z-20 -mx-6 px-6">
-                    <h4 className="text-base font-semibold text-gray-800">
+                {/* Scrollable Content */}
+                <div className="h-[calc(100%-70px)] overflow-y-auto px-6">
+                  <div className="sticky top-0 bg-white pt-3 pb-3 mb-4 z-20 -mx-6 px-6 border-b border-gray-100">
+                    <h4 className="text-sm font-medium text-gray-600">
                       {selectedDate
                         ? new Date(selectedDate).toLocaleDateString("id-ID", {
                             weekday: "long",
@@ -1196,22 +1171,21 @@ const KaiRoomsApp = () => {
                     </h4>
                   </div>
 
-                  {/* Content area dengan padding bottom untuk space */}
-                  <div className="flex flex-col gap-4 pb-6">
+                  <div className="flex flex-col gap-3 pb-6">
                     {eventsForSelectedDate.length > 0 ? (
                       eventsForSelectedDate.map((event, index) => {
-                        const type = event.type ?? "Offline"; // default ke offline jika null
+                        const type = event.type ?? "Offline";
                         return (
                           <div
                             key={index}
-                            className="p-4 bg-[#f8f9fa] rounded-lg border-l-4 border-[#ff7b00] transition hover:-translate-y-0.5 hover:shadow-md"
+                            className="p-4 bg-gray-50 rounded-md border border-gray-200 hover:border-blue-500 transition"
                           >
                             <div className="flex justify-between items-start">
                               <div>
-                                <h4 className="font-medium text-gray-900">
+                                <h4 className="font-semibold text-gray-900">
                                   {event.title}
                                 </h4>
-                                <p className="text-sm text-gray-600">
+                                <p className="text-xs text-gray-600">
                                   {event.startTime
                                     ? new Date(
                                         event.startTime
@@ -1219,7 +1193,6 @@ const KaiRoomsApp = () => {
                                         hour: "2-digit",
                                         minute: "2-digit",
                                         hour12: false,
-                                        timeZone: "Asia/Jakarta",
                                       })
                                     : "-"}
                                   {" - "}
@@ -1230,53 +1203,40 @@ const KaiRoomsApp = () => {
                                         hour: "2-digit",
                                         minute: "2-digit",
                                         hour12: false,
-                                        timeZone: "Asia/Jakarta",
                                       })
-                                    : "-"}
-                                  {" WIB"}
+                                    : "-"}{" "}
+                                  WIB
                                 </p>
-
-                                {/* Tampilkan type rapat */}
-                                <p className="text-xs text-gray-500 italic mt-1">
-                                  Tipe Rapat: {type}
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Tipe: {type}
                                 </p>
-
-                                {/* Tampilkan lokasi/link berdasarkan type */}
-                                <div className="mt-1 space-y-1">
+                                <div className="mt-1 space-y-1 text-xs text-gray-700">
                                   {(type === "Online" || type === "Hybrid") &&
                                     event.linkMeet && (
                                       <a
                                         href={
-                                          event.linkMeet.startsWith(
-                                            "http://"
-                                          ) ||
-                                          event.linkMeet.startsWith("https://")
+                                          event.linkMeet.startsWith("http")
                                             ? event.linkMeet
                                             : `https://${event.linkMeet}`
                                         }
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="text-sm text-blue-600 hover:underline break-all"
+                                        className="text-blue-600 hover:underline"
                                       >
-                                        {event.linkMeet.startsWith("http://") ||
-                                        event.linkMeet.startsWith("https://")
-                                          ? event.linkMeet
-                                          : `https://${event.linkMeet}`}
+                                        {event.linkMeet}
                                       </a>
                                     )}
 
                                   {(type === "Offline" || type === "Hybrid") &&
                                     event.room?.name && (
-                                      <p className="text-sm text-gray-600">
-                                        Ruang {event.room.name}
-                                      </p>
+                                      <p>Lokasi: {event.room.name}</p>
                                     )}
                                 </div>
                               </div>
 
                               <button
                                 onClick={() => handleShowDetail(event)}
-                                className="px-3 py-1 cursor-pointer bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200 transition-colors"
+                                className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 cursor-pointer rounded-md text-xs hover:bg-blue-100 transition"
                               >
                                 Detail
                               </button>
@@ -1285,8 +1245,8 @@ const KaiRoomsApp = () => {
                         );
                       })
                     ) : (
-                      <p className="italic text-gray-400">
-                        Tidak ada meeting pada tanggal ini.
+                      <p className="italic text-gray-400 text-center mt-6">
+                        Tidak ada agenda pada tanggal ini.
                       </p>
                     )}
                   </div>

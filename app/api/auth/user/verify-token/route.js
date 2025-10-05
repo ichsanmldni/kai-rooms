@@ -5,7 +5,10 @@ import jwt from "jsonwebtoken";
 export async function POST(req) {
   try {
     const body = await req.json();
+
     const { token } = body;
+
+    console.log(body);
 
     // Cek apakah token tersedia
     if (!token) {
@@ -20,6 +23,8 @@ export async function POST(req) {
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (err) {
+      console.log(err);
+      console.log("ini kah");
       return NextResponse.json(
         { message: "Token tidak valid atau kadaluarsa" },
         { status: 400 }
@@ -38,6 +43,7 @@ export async function POST(req) {
     });
 
     if (!user) {
+      console.log("ini kahh");
       return NextResponse.json(
         {
           message:
@@ -49,6 +55,7 @@ export async function POST(req) {
 
     return NextResponse.json({ message: "Token valid" });
   } catch (error) {
+    console.log(error);
     return NextResponse.json(
       { message: "Terjadi kesalahan server", error: error.message },
       { status: 500 }

@@ -20,7 +20,23 @@ export async function fetchUserById(id) {
   const { data } = await axios.get(`${BASE_URL}/${id}`);
   return data;
 }
+export async function fetchUserRegistration() {
+  const { data } = await axios.get(`${BASE_URL + "-registration"}`);
+  return data;
+}
+export async function fetchUserRegistrationById(id) {
+  const { data } = await axios.get(`${BASE_URL + "-registration"}/${id}`);
+  return data;
+}
 
+export async function updateUserRegistration(payload) {
+  const res = await axios.patch(`${BASE_URL + "-registration"}`, payload, {
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  return res;
+}
 export async function updateUser(payload) {
   const res = await axios.patch(`${BASE_URL}`, payload, {
     headers: {

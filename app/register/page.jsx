@@ -6,20 +6,29 @@ import { toast, ToastContainer } from "react-toastify";
 import { fetchUnitList } from "../../api-client/unit";
 import { X } from "lucide-react";
 import { set } from "date-fns";
+import { fetchEmployeeList } from "../../api-client/employee";
+import { fetchTncList } from "../../api-client/tnc";
 
 function SignUpPage() {
   const [formDataRegister, setFormDataRegister] = useState({
     name: "",
     email: "",
-    noTelp: "",
-    password: "",
+    nipp: "",
     unitId: "",
+    password: "",
+    confirmPassword: "",
     agree: false,
   });
 
+  const [dataTnc, setDataTnc] = useState([]);
+
+  const [dataSelectedEmployee, setDataSelectedEmployee] = useState(null);
+
   const [dataUnit, setDataUnit] = useState(null);
   const [loadingUnits, setLoadingUnits] = useState(true);
+  const [loadingEmployee, setLoadingEmployee] = useState(true);
   const [modalSnk, setModalSnk] = useState(false);
+  const [dataEmployee, setDataEmployee] = useState(null);
 
   useEffect(() => {
     async function loadUnit() {
@@ -42,11 +51,74 @@ function SignUpPage() {
         setLoadingUnits(false);
       }
     }
+    async function loadTnc() {
+      try {
+        const data = await fetchTncList();
+
+        setDataTnc(data.filter((data) => data.isActive));
+      } catch (error) {
+        toast.error("Gagal memuat data T&C: " + error.message, {
+          position: "bottom-right",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "colored",
+        });
+      }
+    }
     loadUnit();
+    loadTnc();
   }, []);
+
+  console.log(dataTnc, "ini data tnc");
+
+  useEffect(() => {
+    if (formDataRegister.unitId) {
+      async function loadEmployee(unitId) {
+        try {
+          setLoadingEmployee(true);
+          const data = await fetchEmployeeList(undefined, unitId);
+          setDataEmployee(data);
+        } catch (error) {
+          toast.error("Gagal memuat data employee: " + error.message, {
+            position: "bottom-right",
+            autoClose: 3000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            theme: "colored",
+          });
+        } finally {
+          setLoadingEmployee(false);
+        }
+      }
+      loadEmployee(formDataRegister.unitId);
+    }
+  }, [formDataRegister.unitId]);
+
+  useEffect(() => {
+    if (dataSelectedEmployee) {
+      setFormDataRegister((prev) => ({
+        ...prev,
+        email: dataSelectedEmployee.email,
+        nipp: dataSelectedEmployee.nipp,
+      }));
+    }
+  }, [dataSelectedEmployee]);
 
   const handleSignup = async (e) => {
     e.preventDefault();
+
+    console.log(formDataRegister, "ini form data");
+    if (formDataRegister.password !== formDataRegister.confirmPassword) {
+      toast.error("Password tidak cocok!");
+      return;
+    }
 
     if (!formDataRegister.agree) {
       toast.error("Silakan setujui Syarat & Ketentuan terlebih dahulu.", {
@@ -75,29 +147,6 @@ function SignUpPage() {
       });
       return;
     }
-
-    const passwordValid = /^(?=.*[A-Z])(?=.*[\W_]).{8,}$/.test(
-      formDataRegister.password
-    );
-
-    if (!passwordValid) {
-      toast.error(
-        "Password minimal 8 karakter, mengandung huruf besar dan simbol.",
-        {
-          position: "bottom-right",
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-          theme: "colored",
-        }
-      );
-      return;
-    }
-
-    console.log(formDataRegister);
 
     try {
       const res = await registerUser({ ...formDataRegister });
@@ -131,6 +180,8 @@ function SignUpPage() {
       });
     }
   };
+
+  console.log("ini form register", formDataRegister);
 
   return (
     <div className="flex h-screen font-['Segoe_UI',sans-serif] text-black">
@@ -203,60 +254,6 @@ function SignUpPage() {
             className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 w-full"
             onSubmit={handleSignup}
           >
-            {/* Nama */}
-            <div className="flex flex-col">
-              <label className="text-sm font-medium mb-1">Nama</label>
-              <input
-                type="text"
-                placeholder="Masukkan Nama"
-                value={formDataRegister.name}
-                onChange={(e) =>
-                  setFormDataRegister((prev) => ({
-                    ...prev,
-                    name: e.target.value,
-                  }))
-                }
-                required
-                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff]"
-              />
-            </div>
-
-            {/* Email */}
-            <div className="flex flex-col">
-              <label className="text-sm font-medium mb-1">Email</label>
-              <input
-                type="email"
-                placeholder="Masukkan Email"
-                value={formDataRegister.email}
-                onChange={(e) =>
-                  setFormDataRegister((prev) => ({
-                    ...prev,
-                    email: e.target.value,
-                  }))
-                }
-                required
-                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff]"
-              />
-            </div>
-
-            {/* Nomor Telepon */}
-            <div className="flex flex-col">
-              <label className="text-sm font-medium mb-1">Nomor Telepon</label>
-              <input
-                type="tel"
-                placeholder="Masukkan Nomor Telepon"
-                value={formDataRegister.noTelp}
-                onChange={(e) =>
-                  setFormDataRegister((prev) => ({
-                    ...prev,
-                    noTelp: e.target.value,
-                  }))
-                }
-                required
-                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff]"
-              />
-            </div>
-
             {/* Unit */}
             <div className="flex flex-col">
               <label className="text-sm font-medium mb-1">Unit</label>
@@ -284,12 +281,63 @@ function SignUpPage() {
                   ))}
               </select>
             </div>
+            {/* Nama */}
+            <div className="flex flex-col">
+              <label className="text-sm font-medium mb-1">Nama</label>
+              <input
+                type="text"
+                placeholder="Masukkan Nama"
+                value={formDataRegister.name}
+                onChange={(e) =>
+                  setFormDataRegister((prev) => ({
+                    ...prev,
+                    name: e.target.value,
+                  }))
+                }
+                required
+                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff] disabled:bg-gray-100 disabled:cursor-not-allowed"
+              />
+            </div>
 
-            {/* Password - full width */}
-            <div className="flex flex-col md:col-span-2">
+            {/* Email */}
+            <div className="flex flex-col">
+              <label className="text-sm font-medium mb-1">Email</label>
+              <input
+                type="email"
+                placeholder="Masukkan Email"
+                onChange={(e) =>
+                  setFormDataRegister((prev) => ({
+                    ...prev,
+                    email: e.target.value,
+                  }))
+                }
+                value={formDataRegister.email}
+                required
+                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff] disabled:bg-gray-100 disabled:cursor-not-allowed"
+              />
+            </div>
+            <div className="flex flex-col">
+              <label className="text-sm font-medium mb-1">NIPP</label>
+              <input
+                type="text"
+                placeholder="Masukkan NIPP"
+                value={formDataRegister.nipp}
+                onChange={(e) =>
+                  setFormDataRegister((prev) => ({
+                    ...prev,
+                    nipp: e.target.value,
+                  }))
+                }
+                required
+                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff] disabled:bg-gray-100 disabled:cursor-not-allowed"
+              />
+            </div>
+
+            <div className="flex flex-col">
               <label className="text-sm font-medium mb-1">Password</label>
               <input
                 type="password"
+                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff] disabled:bg-gray-100 disabled:cursor-not-allowed"
                 placeholder="Masukkan Password"
                 value={formDataRegister.password}
                 onChange={(e) =>
@@ -299,7 +347,24 @@ function SignUpPage() {
                   }))
                 }
                 required
-                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff]"
+              />
+            </div>
+            <div className="flex flex-col">
+              <label className="text-sm font-medium mb-1">
+                Konfirmasi Password
+              </label>
+              <input
+                type="password"
+                className="w-full p-3 text-black rounded-md border border-gray-900 text-sm focus:outline-none focus:border-[#7f5fff] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                placeholder="Konfirmasi Password"
+                value={formDataRegister.confirmPassword}
+                onChange={(e) =>
+                  setFormDataRegister((prev) => ({
+                    ...prev,
+                    confirmPassword: e.target.value,
+                  }))
+                }
+                required
               />
             </div>
 
@@ -337,9 +402,9 @@ function SignUpPage() {
               <button
                 type="submit"
                 disabled={loadingUnits}
-                className="w-full p-3 bg-[#5a60ea] text-white rounded-lg text-base font-medium hover:bg-[#4a50d0] transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+                className="w-full p-3 bg-[#5a60ea] text-white rounded-lg cursor-pointer text-base font-medium hover:bg-[#4a50d0] transition disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                {loadingUnits ? "Memuat..." : "Daftar"}
+                {loadingUnits ? "Memuat..." : "Setup Akun"}
               </button>
             </div>
           </form>
@@ -376,80 +441,14 @@ function SignUpPage() {
             {/* Modal Content */}
             <div className="px-6 bg-white overflow-y-auto max-h-[60vh]">
               <div className="space-y-4 text-sm leading-relaxed">
-                <section>
-                  <h4 className="font-semibold mb-2">
-                    1. Penerimaan Ketentuan
-                  </h4>
-                  <p>
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed
-                    do eiusmod tempor incididunt ut labore et dolore magna
-                    aliqua. Ut enim ad minim veniam, quis nostrud exercitation
-                    ullamco laboris nisi ut aliquip ex ea commodo consequat.
-                  </p>
-                </section>
-
-                <section>
-                  <h4 className="font-semibold mb-2">2. Penggunaan Layanan</h4>
-                  <p>
-                    Duis aute irure dolor in reprehenderit in voluptate velit
-                    esse cillum dolore eu fugiat nulla pariatur. Excepteur sint
-                    occaecat cupidatat non proident, sunt in culpa qui officia
-                    deserunt mollit anim id est laborum.
-                  </p>
-                </section>
-
-                <section>
-                  <h4 className="font-semibold mb-2">3. Privasi dan Data</h4>
-                  <p>
-                    Sed ut perspiciatis unde omnis iste natus error sit
-                    voluptatem accusantium doloremque laudantium, totam rem
-                    aperiam, eaque ipsa quae ab illo inventore veritatis et
-                    quasi architecto beatae vitae dicta sunt.
-                  </p>
-                </section>
-
-                <section>
-                  <h4 className="font-semibold mb-2">
-                    4. Tanggung Jawab Pengguna
-                  </h4>
-                  <p>
-                    Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut
-                    odit aut fugit, sed quia consequuntur magni dolores eos qui
-                    ratione voluptatem sequi nesciunt neque porro quisquam est.
-                  </p>
-                </section>
-
-                <section>
-                  <h4 className="font-semibold mb-2">
-                    5. Pembatasan Tanggung Jawab
-                  </h4>
-                  <p>
-                    At vero eos et accusamus et iusto odio dignissimos ducimus
-                    qui blanditiis praesentium voluptatum deleniti atque
-                    corrupti quos dolores et quas molestias excepturi sint
-                    occaecati cupiditate non provident.
-                  </p>
-                </section>
-
-                <section>
-                  <h4 className="font-semibold mb-2">6. Perubahan Ketentuan</h4>
-                  <p>
-                    Similique sunt in culpa qui officia deserunt mollitia animi,
-                    id est laborum et dolorum fuga. Et harum quidem rerum
-                    facilis est et expedita distinctio nam libero tempore cum
-                    soluta nobis est eligendi.
-                  </p>
-                </section>
-
-                <section>
-                  <h4 className="font-semibold mb-2">7. Hukum yang Berlaku</h4>
-                  <p>
-                    Temporibus autem quibusdam et aut officiis debitis aut rerum
-                    necessitatibus saepe eveniet ut et voluptates repudiandae
-                    sint et molestiae non recusandae itaque earum rerum hic
-                    tenetur.
-                  </p>
-                </section>
+                {dataTnc?.map((item, index) => (
+                  <section key={item.id}>
+                    <h4 className="font-semibold mb-2">
+                      {index + 1}. {item.title}
+                    </h4>
+                    <p>{item.content}</p>
+                  </section>
+                ))}
               </div>
             </div>
 
@@ -477,6 +476,7 @@ function SignUpPage() {
           </div>
         </div>
       )}
+
       <ToastContainer />
     </div>
   );

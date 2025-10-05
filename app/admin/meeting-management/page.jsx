@@ -98,19 +98,19 @@ export default function MeetingManagement() {
     const start = new Date(startTime);
     const end = new Date(endTime);
 
-    if (now < start) return "upcoming";
-    if (now >= start && now <= end) return "ongoing";
-    return "completed";
+    if (now < start) return "Mendatang";
+    if (now >= start && now <= end) return "Berlangsung";
+    return "Selesai";
   };
 
   const getStatusBadge = (status) => {
     const baseClasses = "px-2 py-1 rounded-full text-xs font-medium";
     switch (status) {
-      case "upcoming":
+      case "Mendatang":
         return `${baseClasses} bg-blue-100 text-blue-800`;
-      case "ongoing":
+      case "Berlangsung":
         return `${baseClasses} bg-green-100 text-green-800`;
-      case "completed":
+      case "Selesai":
         return `${baseClasses} bg-gray-100 text-gray-800`;
       default:
         return `${baseClasses} bg-gray-100 text-gray-800`;
@@ -119,11 +119,11 @@ export default function MeetingManagement() {
 
   const getStatusText = (status) => {
     switch (status) {
-      case "upcoming":
+      case "Mendatang":
         return "Akan Datang";
-      case "ongoing":
+      case "Berlangsung":
         return "Berlangsung";
-      case "completed":
+      case "Selesai":
         return "Selesai";
       default:
         return "-";
@@ -135,8 +135,12 @@ export default function MeetingManagement() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Manajemen Rapat</h1>
-          <p className="text-gray-600">Kelola dan pantau semua rapat yang telah dijadwalkan</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Manajemen Rapat
+          </h1>
+          <p className="text-gray-600">
+            Kelola dan pantau semua rapat yang telah dijadwalkan
+          </p>
         </div>
 
         {/* Controls */}
@@ -144,7 +148,10 @@ export default function MeetingManagement() {
           <div className="flex flex-col sm:flex-row gap-4 items-center">
             {/* Sort Control */}
             <div className="flex items-center gap-3">
-              <label htmlFor="sortOrder" className="text-sm font-medium text-gray-700">
+              <label
+                htmlFor="sortOrder"
+                className="text-sm font-medium text-gray-700"
+              >
                 Urutkan:
               </label>
               <select
@@ -160,7 +167,10 @@ export default function MeetingManagement() {
 
             {/* Date Filter */}
             <div className="flex items-center gap-3">
-              <label htmlFor="filterDate" className="text-sm font-medium text-gray-700">
+              <label
+                htmlFor="filterDate"
+                className="text-sm font-medium text-gray-700"
+              >
                 Filter Tanggal:
               </label>
               <div className="flex items-center gap-2">
@@ -185,7 +195,10 @@ export default function MeetingManagement() {
 
             {/* Search Box */}
             <div className="flex items-center gap-3 flex-grow">
-              <label htmlFor="searchMeeting" className="text-sm font-medium text-gray-700">
+              <label
+                htmlFor="searchMeeting"
+                className="text-sm font-medium text-gray-700"
+              >
                 Cari Nama Rapat:
               </label>
               <input
@@ -251,9 +264,15 @@ export default function MeetingManagement() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {meetings.map((meeting) => {
-                    const status = getMeetingStatus(meeting.startTime, meeting.endTime);
+                    const status = getMeetingStatus(
+                      meeting.startTime,
+                      meeting.endTime
+                    );
                     return (
-                      <tr key={meeting.id} className="hover:bg-gray-50 transition-colors">
+                      <tr
+                        key={meeting.id}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
                             <h3 className="text-sm font-medium text-gray-900">
@@ -281,7 +300,8 @@ export default function MeetingManagement() {
                             {formatDate(meeting.startTime)}
                           </div>
                           <div className="text-sm text-gray-500">
-                            {formatTime(meeting.startTime)} - {formatTime(meeting.endTime)}
+                            {formatTime(meeting.startTime)} -{" "}
+                            {formatTime(meeting.endTime)}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -302,8 +322,18 @@ export default function MeetingManagement() {
                               onClick={() => setPendingDeleteId(meeting.id)}
                               className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
                             >
-                              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              <svg
+                                className="w-4 h-4 mr-2"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
                               </svg>
                               Hapus
                             </button>
